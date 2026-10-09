@@ -44,3 +44,5 @@ The client portal home page, built from the v2 design handoff (light theme: whit
 - `api.ts` simulates the feedback and investigation form submissions.
 - To review the extra design states, open
   `/portal?state=no-alert,empty-alerts,sent&threat=LOW` (any combination; `threat` is LOW, ELEVATED or HIGH).
+- Hosting: the portal runs on a Proxmox VM behind a Cloudflare Tunnel at portal.365smg.com. See
+  [`deploy/README.md`](deploy/README.md).

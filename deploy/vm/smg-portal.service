@@ -1,0 +1,35 @@
+[Unit]
+Description=365 SMG Client Portal (Next.js)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=smg
+Group=smg
+WorkingDirectory=/opt/smg-portal/current
+ExecStart=/usr/bin/node server.js
+Environment=NODE_ENV=production
+Environment=PORT=3000
+# Localhost only: Cloudflare Tunnel is the sole way in.
+Environment=HOSTNAME=127.0.0.1
+Environment=PORTAL_ONLY=1
+Environment=SMG_DATA_DIR=/var/lib/smg
+EnvironmentFile=-/etc/smg-portal.env
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/smg /opt/smg-portal/current/.next/cache
+
+[Install]
+WantedBy=multi-user.target

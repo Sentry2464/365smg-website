@@ -7,6 +7,8 @@
 #   SSH_KEY_FILE   your SSH public key, e.g. /root/smgadmin.pub
 # Optional (defaults shown):
 #   VMID=150  NAME=smg-portal  STORAGE=local  BRIDGE=vmbr0  VLAN=50
+#   VLAN=none puts the VM straight on the bridge (no VLAN); the Proxmox firewall
+#   must then be running, because it is the only thing isolating the VM.
 #   IP_CIDR=10.50.0.10/24  GATEWAY=10.50.0.1  DNS=10.50.0.1
 #   CORES=2  MEMORY_MB=4096  DISK_GB=40  CI_USER=smgadmin
 #   BACKUP_STORAGE=   (set to a PBS/NAS storage ID to add a nightly backup job)
@@ -48,8 +50,18 @@ STORAGE_TYPE=$(pvesm status | awk -v s="$STORAGE" '$1==s {print $2}')
 DISK_FMT=""
 [ "$STORAGE_TYPE" = "dir" ] && DISK_FMT=",format=qcow2"
 
+TAG=""
+if [ "$VLAN" = "none" ]; then
+  # Without a VLAN, the VM's Proxmox firewall rules are the only isolation from the LAN.
+  pve-firewall status 2>/dev/null | grep -q "enabled/running" || die "VLAN=none needs the Proxmox firewall running.
+       Datacenter > Firewall > Options: first set 'Input Policy' to ACCEPT (so host
+       access over LAN and Tailscale is unaffected), then set 'Firewall' to Yes. Rerun."
+else
+  TAG=",tag=$VLAN"
+fi
+
 # VLAN tagging needs a VLAN-aware bridge.
-if [ "$(cat "/sys/class/net/$BRIDGE/bridge/vlan_filtering" 2>/dev/null)" != "1" ]; then
+if [ -n "$TAG" ] && [ "$(cat "/sys/class/net/$BRIDGE/bridge/vlan_filtering" 2>/dev/null)" != "1" ]; then
   die "bridge $BRIDGE is not VLAN aware. In the Proxmox UI: Node > System > Network >
        $BRIDGE > tick 'VLAN aware', apply, then rerun"
 fi
@@ -63,13 +75,13 @@ if [ ! -f "$IMG_NAME" ] || ! grep " \*\?$IMG_NAME\$" SHA256SUMS | sha256sum -c -
   grep " \*\?$IMG_NAME\$" SHA256SUMS | sha256sum -c - || die "checksum mismatch for $IMG_NAME"
 fi
 
-echo "==> Creating VM $VMID ($NAME) on VLAN $VLAN"
+echo "==> Creating VM $VMID ($NAME) on $BRIDGE${TAG:+, VLAN $VLAN}"
 qm create "$VMID" \
   --name "$NAME" \
   --description "365 SMG Client Portal (portal.365smg.com). Created by deploy/proxmox/create-vm.sh" \
   --ostype l26 --machine q35 --cpu host --cores "$CORES" --memory "$MEMORY_MB" \
   --scsihw virtio-scsi-single \
-  --net0 "virtio,bridge=$BRIDGE,tag=$VLAN,firewall=1" \
+  --net0 "virtio,bridge=$BRIDGE$TAG,firewall=1" \
   --agent enabled=1 --serial0 socket --vga serial0 \
   --onboot 1 --tags smg-portal
 qm set "$VMID" --scsi0 "$STORAGE:0,import-from=$IMG_DIR/$IMG_NAME,discard=on,ssd=1,iothread=1$DISK_FMT"

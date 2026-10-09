@@ -34,3 +34,13 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Client Portal (`/portal`)
+
+The client portal home page, built from the v2 design handoff (light theme: white, navy and gold). Code lives in
+`src/app/portal/` (route and scoped `portal.css`) and `src/components/portal/`.
+
+- `data.ts` holds the handoff's sample data; later phases replace it with the portal API.
+- `api.ts` simulates the feedback and investigation form submissions.
+- To review the extra design states, open
+  `/portal?state=no-alert,empty-alerts,sent&threat=LOW` (any combination; `threat` is LOW, ELEVATED or HIGH).

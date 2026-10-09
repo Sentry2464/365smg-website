@@ -1,14 +1,16 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ALL_SITES, mapIncidents, sites, type SiteId } from './data'
+import { usePortal } from './context'
+import { ALL_SITES, type MapIncident, type SiteId } from './data'
 
 const LAYERS = ['Weather', 'Incidents', 'Fires', 'Earthquakes', 'Flights'] as const
 type Layer = (typeof LAYERS)[number]
 
 // Placeholder map: positioned overlays on a grid. Phase 5 swaps the canvas for
 // MapLibre GL; the pills, legend and expand behaviour stay as they are.
-export function IntelMap({ siteId }: { siteId: SiteId }) {
+export function IntelMap({ siteId, incidents }: { siteId: SiteId; incidents: MapIncident[] }) {
+  const { sites } = usePortal()
   const [layers, setLayers] = useState<Record<Layer, boolean>>({
     Weather: true,
     Incidents: true,
@@ -71,14 +73,18 @@ export function IntelMap({ siteId }: { siteId: SiteId }) {
             )}
 
             {layers.Incidents &&
-              mapIncidents.map((i) => (
-                <div
-                  key={i.id}
-                  className={`cp-map__ring cp-map__ring--${i.severity}`}
-                  style={{ left: `${i.x}%`, top: `${i.y}%` }}
-                  title={i.label}
-                />
-              ))}
+              incidents.map((i) => {
+                const site = sites.find((s) => s.id === i.siteId)
+                if (!site) return null
+                return (
+                  <div
+                    key={i.id}
+                    className={`cp-map__ring cp-map__ring--${i.severity}`}
+                    style={{ left: `${site.map.x}%`, top: `${site.map.y}%` }}
+                    title={i.label}
+                  />
+                )
+              })}
 
             {layers.Fires && (
               <>

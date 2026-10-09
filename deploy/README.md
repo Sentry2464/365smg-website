@@ -18,12 +18,15 @@ client ──https──▶ Cloudflare ◀──tunnel (outbound)── cloudfla
 | `vm/provision.sh` | VM, with sudo, once | Updates, firewall, Node 22, cloudflared, app user, deploy key, service |
 | `vm/deploy.sh` | VM, as `sudo smg-deploy` | Pulls, builds, releases, health-checks, rolls back on failure |
 | `vm/smg-portal.service` | (installed by provision) | systemd unit for the Next.js server |
+| `vm/smg-admin` | VM, as `sudo smg-admin` | Creates 365 SMG staff accounts from the command line |
+| `vm/smg-db-backup.*` | (installed by provision) | Daily consistent copy of the database at 02:00, kept 14 days |
 
 Values used below: VM ID `150`, VM IP `10.50.0.10/24`, gateway and DNS `10.50.0.1`. Change
 them if your VLAN 50 subnet is different; every script takes them as variables.
 
-> **Before Phase 3 (logins) is done**, the portal only shows sample data and has no login.
-> Step 4 puts Cloudflare Access in front of it so only 365 SMG staff can open it.
+> **Until you've tested real accounts**, keep Cloudflare Access (step 4) in front of the portal
+> so only 365 SMG staff can reach it. The portal has its own login with two-step codes; Access
+> is a second gate you remove when clients start using it.
 
 ---
 
@@ -88,7 +91,12 @@ sudo MGMT_CIDR=10.10.0.0/24 ./vm/provision.sh
 
 This installs updates (with automatic security updates and a 04:30 reboot when needed), a
 host firewall that allows SSH from `MGMT_CIDR` only, Node.js 22, `cloudflared`, a service
-user `smg`, and the `smg-portal` service. At the end it prints a **deploy key**.
+user `smg`, the `smg-portal` service and a daily database copy. It also writes
+`/etc/smg-portal.env` with a newly generated `SMG_SECRET_KEY`. At the end it prints a **deploy key**.
+
+> **Save `SMG_SECRET_KEY` somewhere safe**, such as your password manager. It encrypts the
+> authenticator secrets in the database. If the VM is rebuilt without it, every user has
+> to set up two-step login again.
 
 Add that key to GitHub: *sentry2464/365smg-website › Settings › Deploy keys › Add deploy key*,
 title `smg-portal VM`, **leave "Allow write access" off**.
@@ -102,9 +110,9 @@ Requires the `365smg.com` DNS zone to be on Cloudflare.
 2. On the VM: `sudo cloudflared service install <TOKEN>`
 3. In the tunnel's **Public hostnames** tab, add: subdomain `portal`, domain `365smg.com`,
    service type `HTTP`, URL `localhost:3000`.
-4. **Until Phase 3 is live**, protect it: *Zero Trust › Access › Applications › Add › Self-hosted*,
-   domain `portal.365smg.com`, policy *Allow* for emails ending in `@365smg.com` (one-time PIN
-   login). Remove or loosen this when client logins ship.
+4. **Until clients start using it**, add a second gate: *Zero Trust › Access › Applications ›
+   Add › Self-hosted*, domain `portal.365smg.com`, policy *Allow* for emails ending in
+   `@365smg.com` (one-time PIN login). Delete this application when you open the portal to clients.
 
 ## 5. Deploy, update, roll back
 
@@ -120,13 +128,46 @@ fails it switches back automatically. The last 5 releases are kept.
 
 Then open https://portal.365smg.com: it should redirect to `/portal`.
 
-## 6. Backups
+## 6. Accounts and email
+
+Create your own admin account on the VM (it prints a one-time password):
+
+```bash
+sudo smg-admin create-staff --email you@365smg.com --name "Your Name"
+sudo smg-admin create-staff --email pi@365smg.com --name "Investigator Name" --role investigator
+```
+
+Sign in at https://portal.365smg.com: you choose a new password, then scan a QR code with
+an authenticator app (Microsoft Authenticator, Google Authenticator, 1Password and so on).
+Every later sign-in asks for the 6-digit code.
+
+From then on, use **Portal admin** in the browser to add clients, their sites (with
+coordinates) and their users. Each new user gets a temporary password to pass on by phone
+or in person. Admins can also reset passwords and two-step login and disable accounts. If
+someone loses their phone, confirm who they are, then use *Reset two-step*.
+
+| Role | Can see |
+| --- | --- |
+| Client user | Their own client's portal only |
+| Admin | Clients, sites, users, feedback inbox, audit log. **Not** investigation details |
+| Investigator | Confidential investigation requests (every view is logged) |
+
+**Email.** Fill in the `SMTP_*` lines in `/etc/smg-portal.env` (Microsoft 365 or Google
+Workspace SMTP relay both work), set `NOTIFY_INVESTIGATIONS_TO`, then
+`sudo systemctl restart smg-portal`. Feedback goes to each client's account manager email.
+Investigation alerts carry only the case reference, never the details. Until SMTP is set,
+messages are written to `journalctl -u smg-portal` instead.
+
+## 7. Backups
 
 Use *Datacenter › Backup › Add*: VM 150, schedule `02:30`, mode *Snapshot*, retention
 7 daily and 4 weekly, stored on a **Proxmox Backup Server or NAS**. A backup on the same
 disk as the VM doesn't survive a disk failure. Test a restore once before launch.
 
-App data (from Phase 3 on) lives in `/var/lib/smg` and is included in the VM backup.
+The database is a single SQLite file, `/var/lib/smg/portal.db`. A timer copies it every
+night at 02:00 to `/var/lib/smg/backups/` (kept 14 days), and the VM backup includes both.
+To restore one day's copy: `sudo systemctl stop smg-portal`, copy the backup over
+`portal.db` (as user `smg`), then `sudo systemctl start smg-portal`.
 
 ## Troubleshooting
 

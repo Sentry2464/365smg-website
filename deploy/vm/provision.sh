@@ -77,10 +77,38 @@ fi
 sudo -u "$APP_USER" sh -c "ssh-keyscan -t ed25519 github.com >> $APP_DIR/.ssh/known_hosts 2>/dev/null"
 install -m 0755 "$HERE/deploy.sh" /usr/local/bin/smg-deploy
 
-echo "==> systemd service"
+echo "==> Settings file /etc/smg-portal.env"
+if [ ! -f /etc/smg-portal.env ]; then
+  umask 077
+  cat > /etc/smg-portal.env <<ENV
+# Read by systemd as root; the app never sees this file directly.
+# Encrypts authenticator secrets. Keep a copy somewhere safe (e.g. your password
+# manager): if it is lost, every user has to set up two-step login again.
+SMG_SECRET_KEY=$(head -c 32 /dev/urandom | base64)
+
+# Outgoing email for feedback and investigation alerts (leave blank to log only).
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM=Client Portal <portal@365smg.com>
+# Investigations alerts go only here (case reference only, never the details).
+NOTIFY_INVESTIGATIONS_TO=
+# Feedback goes to each client's account manager; this catches clients without one.
+NOTIFY_DEFAULT_TO=
+ENV
+  umask 022
+fi
+chmod 600 /etc/smg-portal.env
+
+echo "==> systemd units and the smg-admin command"
 install -m 0644 "$HERE/smg-portal.service" /etc/systemd/system/smg-portal.service
+install -m 0644 "$HERE/smg-db-backup.service" "$HERE/smg-db-backup.timer" /etc/systemd/system/
+install -m 0755 "$HERE/smg-admin" /usr/local/bin/smg-admin
+install -d -o "$APP_USER" -g "$APP_USER" -m 0750 "$DATA_DIR/backups"
 systemctl daemon-reload
 systemctl enable smg-portal
+systemctl enable --now smg-db-backup.timer
 
 cat <<EOF
 
@@ -92,6 +120,8 @@ Provisioning complete.
 $(cat "$APP_DIR/.ssh/id_ed25519.pub")
 
 2. Then deploy:   sudo smg-deploy
+3. Create your own admin account:
+   sudo smg-admin create-staff --email you@365smg.com --name "Your Name"
 EOF
-[ -z "${CF_TUNNEL_TOKEN:-}" ] && echo "3. Cloudflare Tunnel not installed yet: sudo cloudflared service install <TOKEN>  (README step 4)"
+[ -z "${CF_TUNNEL_TOKEN:-}" ] && echo "4. Cloudflare Tunnel not installed yet: sudo cloudflared service install <TOKEN>  (README step 4)"
 exit 0

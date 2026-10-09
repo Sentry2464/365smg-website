@@ -40,8 +40,21 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 The client portal home page, built from the v2 design handoff (light theme: white, navy and gold). Code lives in
 `src/app/portal/` (route and scoped `portal.css`) and `src/components/portal/`.
 
-- `data.ts` holds the handoff's sample data; later phases replace it with the portal API.
-- `api.ts` simulates the feedback and investigation form submissions.
+- Sign-in is at `/portal/login`: password, then a 6-digit code from an authenticator app.
+  365 SMG staff manage clients, sites and users at `/portal/admin`.
+- Data lives in a SQLite file (`.data/portal.db` in development, `/var/lib/smg/portal.db` on
+  the VM). Server code is in `src/server/`; every client query is bound to the signed-in
+  user's client.
+- `data.ts` still holds the handoff's sample feeds (alerts, weather, news); Phase 4 replaces them.
+
+Local development:
+
+```bash
+npm run portal-admin -- seed-demo   # demo clients and users, password "demo-password-2026"
+npm run dev                         # then open http://localhost:3000/portal
+npm test                            # login, two-step codes and data separation tests
+```
+
 - To review the extra design states, open
   `/portal?state=no-alert,empty-alerts,sent&threat=LOW` (any combination; `threat` is LOW, ELEVATED or HIGH).
 - Hosting: the portal runs on a Proxmox VM behind a Cloudflare Tunnel at portal.365smg.com. See

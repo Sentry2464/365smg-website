@@ -1,5 +1,9 @@
+import { redirect } from 'next/navigation'
 import { ClientPortal, type PortalPreview } from '@/components/portal/ClientPortal'
-import type { ThreatLevel } from '@/components/portal/data'
+import { placeSites, sampleFeed, type Site, type ThreatLevel } from '@/components/portal/data'
+import { db } from '@/server/db'
+import { requireUser } from '@/server/session'
+import { clientScope } from '@/server/store'
 
 const THREATS: ThreatLevel[] = ['LOW', 'ELEVATED', 'HIGH']
 
@@ -9,6 +13,23 @@ export default async function PortalPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { user } = await requireUser()
+  if (user.role !== 'client') redirect('/portal/admin')
+
+  const scope = clientScope(db(), user.client_id!)
+  const client = scope.client()!
+  const rows = scope.sites()
+  const positions = placeSites(rows)
+  const sites: Site[] = rows.map((r, i) => ({
+    id: r.id,
+    slug: r.slug,
+    name: r.name,
+    shortName: r.name.split(/\s+/).slice(0, 2).join(' '),
+    city: r.city,
+    timeZone: r.time_zone,
+    map: positions[i],
+  }))
+
   const params = await searchParams
   const states = String(params.state ?? '').split(',')
   const threat = String(params.threat ?? '').toUpperCase() as ThreatLevel
@@ -18,5 +39,25 @@ export default async function PortalPage({
     formsSent: states.includes('sent'),
     threat: THREATS.includes(threat) ? threat : undefined,
   }
-  return <ClientPortal preview={preview} />
+
+  const names = user.name.trim().split(/\s+/)
+  return (
+    <ClientPortal
+      user={{
+        name: user.name,
+        firstName: names[0],
+        initials: (names[0][0] + (names.length > 1 ? names[names.length - 1][0] : '')).toUpperCase(),
+        email: user.email,
+      }}
+      client={{ name: client.name, industry: client.industry, industryPlural: client.industry_plural }}
+      sites={sites}
+      feed={sampleFeed(sites)}
+      updatedAt={new Date().toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: sites[0]?.timeZone ?? 'America/New_York',
+      })}
+      preview={preview}
+    />
+  )
 }

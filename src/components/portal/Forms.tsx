@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, type FormEvent } from 'react'
-import { submitFeedback, submitInvestigation } from './api'
-import { contact, feedbackTopics, investigationTags, investigationTypes, type SiteId } from './data'
+import { submitFeedback, submitInvestigation } from '@/app/portal/actions'
+import { usePortal } from './context'
+import { ALL_SITES, contact, feedbackTopics, investigationTags, investigationTypes, type SiteId } from './data'
 import { SiteSelect } from './Header'
 
 type Status = 'idle' | 'sending' | 'sent' | 'error'
 
 export function InvestigationsSection({ forceSent }: { forceSent?: boolean }) {
+  const { sites } = usePortal()
   const [status, setStatus] = useState<Status>(forceSent ? 'sent' : 'idle')
   const [caseRef, setCaseRef] = useState(forceSent ? 'INV-2026-0142' : '')
   const [errors, setErrors] = useState<{ description?: string }>({})
@@ -30,7 +32,12 @@ export function InvestigationsSection({ forceSent }: { forceSent?: boolean }) {
         description,
         contactMethod: f.get('contact') === 'email' ? 'email' : 'phone',
       })
-      setCaseRef(res.caseRef)
+      if (!res.ok) {
+        setErrors({ description: res.error })
+        setStatus('idle')
+        return
+      }
+      setCaseRef(res.caseRef ?? '')
       setStatus('sent')
     } catch {
       setStatus('error')
@@ -84,7 +91,7 @@ export function InvestigationsSection({ forceSent }: { forceSent?: boolean }) {
           </div>
           <div className="cp-field cp-mobile-hide">
             <label htmlFor="cp-inv-location">Location or address involved</label>
-            <input id="cp-inv-location" name="location" className="cp-input" placeholder="e.g. Royal Cypress Preserve clubhouse" />
+            <input id="cp-inv-location" name="location" className="cp-input" placeholder={sites[0] ? `e.g. ${sites[0].name} clubhouse` : 'Address or place'} />
           </div>
           <div className="cp-field">
             <label htmlFor="cp-inv-desc">Brief description</label>
@@ -154,16 +161,19 @@ export function FeedbackSection({ siteId, forceSent }: { siteId: SiteId; forceSe
     setError('')
     setStatus('sending')
     try {
-      const res = await submitFeedback(
-        {
-          topic: String(f.get('topic')),
-          siteId: formSite ?? siteId,
-          message,
-          callBack: f.get('callback') === 'on',
-        },
-        contact.replyBusinessDays,
-      )
-      setReplyBy(res.replyBy)
+      const chosen = formSite ?? siteId
+      const res = await submitFeedback({
+        topic: String(f.get('topic')),
+        siteId: chosen === ALL_SITES ? '' : chosen,
+        message,
+        callBack: f.get('callback') === 'on',
+      })
+      if (!res.ok) {
+        setError(res.error)
+        setStatus('idle')
+        return
+      }
+      setReplyBy(res.replyBy ?? '')
       setStatus('sent')
     } catch {
       setStatus('error')

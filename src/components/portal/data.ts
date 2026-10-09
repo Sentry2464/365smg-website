@@ -1,6 +1,6 @@
-// Sample data from the v2 design handoff. Every name, headline, phone number
-// and time here is placeholder content; later phases replace this module with
-// calls to the portal API (see the handoff README "State Management / Data").
+// Portal view types, plus the design handoff's sample content (weather, ticker,
+// news, tips, podcast). Clients, sites and users come from the database; the
+// sample content is replaced with live feeds in Phase 4.
 
 export type Severity = 'HIGH' | 'MED' | 'LOW'
 export type ThreatLevel = 'LOW' | 'ELEVATED' | 'HIGH'
@@ -9,6 +9,7 @@ export const ALL_SITES = 'all'
 
 export interface Site {
   id: SiteId
+  slug: string
   name: string
   shortName: string
   city: string
@@ -65,40 +66,40 @@ export const contact = {
   piLicense: '[A#######]',
 }
 
-export const me = {
-  firstName: 'Janet',
-  initials: 'JM',
-  clientName: 'Royal Cypress Preserve HOA',
-  industry: 'Residential community',
-  industryPlural: 'residential communities',
-  updatedAt: '2:41 PM',
+export interface PortalUser {
+  name: string
+  firstName: string
+  initials: string
+  email: string
 }
 
-export const sites: Site[] = [
-  {
-    id: 'royal-cypress',
-    name: 'Royal Cypress Preserve',
-    shortName: 'Royal Cypress',
-    city: 'Orlando, FL',
-    timeZone: 'America/New_York',
-    map: { x: 32, y: 48 },
-  },
-  {
-    id: 'lake-nona',
-    name: 'Lake Nona Commons',
-    shortName: 'Lake Nona Commons',
-    city: 'Orlando, FL',
-    timeZone: 'America/New_York',
-    map: { x: 70, y: 66 },
-  },
-]
+export interface PortalClient {
+  name: string
+  industry: string
+  industryPlural: string
+}
 
-export const alerts: Alert[] = [
+export interface MapIncident {
+  id: string
+  severity: 'HIGH' | 'MED'
+  siteId: SiteId
+  label: string
+}
+
+export interface Feed {
+  alerts: Alert[]
+  summaries: Record<SiteId, SiteSummary>
+  incidents: MapIncident[]
+}
+
+// Sample feed from the design, shown only for the demo client's sites (matched
+// by slug). Phase 4 replaces this with live NWS, incident and news data.
+const sampleAlerts: (Omit<Alert, 'siteId'> & { siteSlug: string | null })[] = [
   {
     id: 'a1',
     severity: 'HIGH',
     title: 'Vehicle break-ins reported along Apopka-Vineland Rd',
-    siteId: 'royal-cypress',
+    siteSlug: 'royal-cypress-preserve',
     distanceMi: 0.8,
     time: '1:58 PM',
     source: 'OCSO',
@@ -108,7 +109,7 @@ export const alerts: Alert[] = [
     id: 'a2',
     severity: 'MED',
     title: 'Severe thunderstorm warning until 6:00 PM',
-    siteId: null,
+    siteSlug: null,
     time: '2:15 PM',
     source: 'NWS',
     url: 'https://www.weather.gov/mlb/',
@@ -117,25 +118,64 @@ export const alerts: Alert[] = [
     id: 'a3',
     severity: 'LOW',
     title: 'Lane closures on Narcoossee Rd through Friday',
-    siteId: 'lake-nona',
+    siteSlug: 'lake-nona-commons',
     time: '9:40 AM',
     source: 'FDOT',
     url: 'https://www.fdot.gov/',
   },
 ]
 
-/** Impact circles on the intel map (OSIRIS incidents layer). */
-export const mapIncidents: { id: string; severity: 'HIGH' | 'MED'; x: number; y: number; label: string }[] = [
-  { id: 'i1', severity: 'HIGH', x: 32, y: 48, label: 'Vehicle break-ins · OCSO · 1:58 PM' },
-  { id: 'i2', severity: 'MED', x: 70, y: 66, label: 'Suspicious person reports · OPD · 11:20 AM' },
+const sampleIncidents = [
+  { id: 'i1', severity: 'HIGH' as const, siteSlug: 'royal-cypress-preserve', label: 'Vehicle break-ins · OCSO · 1:58 PM' },
+  { id: 'i2', severity: 'MED' as const, siteSlug: 'lake-nona-commons', label: 'Suspicious person reports · OPD · 11:20 AM' },
 ]
 
-// Threat level and the banner alert are decided server-side per site
-// (rules still to be confirmed with ops).
-export const summaries: Record<SiteId, SiteSummary> = {
-  [ALL_SITES]: { threatLevel: 'ELEVATED', activeAlertId: 'a1' },
-  'royal-cypress': { threatLevel: 'ELEVATED', activeAlertId: 'a1' },
-  'lake-nona': { threatLevel: 'ELEVATED', activeAlertId: null },
+const sampleThreat: Record<string, ThreatLevel> = {
+  'royal-cypress-preserve': 'ELEVATED',
+  'lake-nona-commons': 'ELEVATED',
+}
+
+export function sampleFeed(sites: (Site & { slug: string })[]): Feed {
+  const bySlug = new Map(sites.map((s) => [s.slug, s.id]))
+  const isDemo = sites.some((s) => s.slug in sampleThreat)
+  const alerts: Alert[] = isDemo
+    ? sampleAlerts
+        .filter((a) => a.siteSlug === null || bySlug.has(a.siteSlug))
+        .map(({ siteSlug, ...a }) => ({ ...a, siteId: siteSlug ? bySlug.get(siteSlug)! : null }))
+    : []
+  const summaries: Record<SiteId, SiteSummary> = {}
+  for (const s of sites) {
+    const banner = alerts.find((a) => a.siteId === s.id && a.severity === 'HIGH')
+    summaries[s.id] = { threatLevel: sampleThreat[s.slug] ?? 'LOW', activeAlertId: banner?.id ?? null }
+  }
+  const anyBanner = alerts.find((a) => a.severity === 'HIGH' && a.siteId)
+  summaries[ALL_SITES] = {
+    threatLevel: sites.some((s) => sampleThreat[s.slug] === 'ELEVATED') ? 'ELEVATED' : 'LOW',
+    activeAlertId: anyBanner?.id ?? null,
+  }
+  const incidents = sampleIncidents
+    .filter((i) => bySlug.has(i.siteSlug))
+    .map(({ siteSlug, ...i }) => ({ ...i, siteId: bySlug.get(siteSlug)! }))
+  return { alerts, summaries, incidents }
+}
+
+/**
+ * Places sites on the placeholder map from their coordinates: west-east across
+ * 30–70% of the width, north-south across 45–67% of the height.
+ */
+export function placeSites<T extends { lat: number | null; lng: number | null }>(rows: T[]) {
+  const located = rows.filter((r) => r.lat != null && r.lng != null)
+  const lats = located.map((r) => r.lat!)
+  const lngs = located.map((r) => r.lng!)
+  const [minLat, maxLat, minLng, maxLng] = [Math.min(...lats), Math.max(...lats), Math.min(...lngs), Math.max(...lngs)]
+  return rows.map((r, i) => {
+    if (r.lat == null || r.lng == null || located.length < 2) {
+      return { x: rows.length === 1 ? 50 : 30 + (40 * i) / Math.max(1, rows.length - 1), y: 55 }
+    }
+    const x = maxLng === minLng ? 50 : 30 + (40 * (r.lng - minLng)) / (maxLng - minLng)
+    const y = maxLat === minLat ? 55 : 45 + (22 * (maxLat - r.lat)) / (maxLat - minLat)
+    return { x, y }
+  })
 }
 
 export const weather: Weather = {
@@ -213,20 +253,18 @@ export const investigationTags = [
   'Due diligence',
 ]
 
-export function siteLabel(id: SiteId) {
+export function siteLabel(id: SiteId, sites: Site[]) {
   if (id === ALL_SITES) return `All sites (${sites.length})`
   const s = sites.find((x) => x.id === id)
   return s ? `${s.name} — ${s.city}` : ''
 }
 
-export function alertsForSite(id: SiteId) {
+export function alertsForSite(alerts: Alert[], id: SiteId) {
   if (id === ALL_SITES) return alerts
   return alerts.filter((a) => a.siteId === null || a.siteId === id)
 }
 
-export function alertMeta(a: Alert) {
+export function alertMeta(a: Alert, sites: Site[]) {
   const site = a.siteId ? sites.find((s) => s.id === a.siteId)?.shortName : 'All sites'
-  return [site, a.distanceMi != null ? `${a.distanceMi} mi` : null, a.time, a.source]
-    .filter(Boolean)
-    .join(' · ')
+  return [site, a.distanceMi != null ? `${a.distanceMi} mi` : null, a.time, a.source].filter(Boolean).join(' · ')
 }

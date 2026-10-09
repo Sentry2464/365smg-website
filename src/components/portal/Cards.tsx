@@ -1,14 +1,16 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { alertMeta, briefing, me, news, podcast, tips, weather, type Alert } from './data'
+import { usePortal } from './context'
+import { alertMeta, briefing, news, podcast, tips, weather, type Alert, type Site } from './data'
 
-export function WeatherCard() {
+export function WeatherCard({ site }: { site?: Site }) {
+  const city = site?.city ?? weather.city
   return (
     <section className="cp-card cp-area-weather" aria-labelledby="cp-wx-title">
       <div className="cp-card__head">
         <h2 id="cp-wx-title" className="cp-card__title">
-          Weather · {weather.city}
+          Weather · {city}
         </h2>
       </div>
       <div className="cp-wx">
@@ -16,7 +18,7 @@ export function WeatherCard() {
           ⛅
         </span>
         <div>
-          <span className="cp-wx__label cp-label">Weather · {weather.city.split(',')[0]}</span>
+          <span className="cp-wx__label cp-label">Weather · {city.split(',')[0]}</span>
           <div className="cp-wx__temp">
             {weather.tempF}°F
           </div>
@@ -41,6 +43,7 @@ export function WeatherCard() {
 }
 
 export function AlertsCard({ alerts }: { alerts: Alert[] }) {
+  const { sites } = usePortal()
   return (
     <section className="cp-card cp-area-alerts" aria-labelledby="cp-alerts-title">
       <div className="cp-card__head">
@@ -61,7 +64,7 @@ export function AlertsCard({ alerts }: { alerts: Alert[] }) {
                 <span className={`cp-sev cp-sev--${a.severity}`}>{a.severity}</span>
                 <span className="cp-alert__body">
                   <span className="cp-alert__title">{a.title}</span>
-                  <span className="cp-meta">{alertMeta(a)}</span>
+                  <span className="cp-meta">{alertMeta(a, sites)}</span>
                 </span>
               </a>
             </li>
@@ -76,11 +79,12 @@ export function AlertsCard({ alerts }: { alerts: Alert[] }) {
 }
 
 export function NewsCard() {
+  const { client } = usePortal()
   return (
     <section className="cp-card cp-area-news" aria-labelledby="cp-news-title">
       <div className="cp-card__head">
         <h2 id="cp-news-title" className="cp-card__title">
-          News for {me.industryPlural}
+          News for {client.industryPlural}
         </h2>
         <span className="cp-card__sub">Filtered by your location and sector</span>
       </div>

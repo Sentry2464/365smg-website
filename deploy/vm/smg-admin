@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Portal database tasks, run as the app user. See scripts/portal-admin.mjs.
+#   sudo smg-admin create-staff --email you@365smg.com --name "Your Name" [--role investigator]
+set -euo pipefail
+[ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }
+[ -d /opt/smg-portal/src/node_modules ] || { echo "deploy first: sudo smg-deploy" >&2; exit 1; }
+cd /opt/smg-portal/src
+exec sudo -u smg -H env NODE_ENV=production SMG_DATA_DIR=/var/lib/smg node scripts/portal-admin.mjs "$@"

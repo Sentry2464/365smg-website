@@ -1627,3 +1627,234 @@ textarea.cp-input {
     font-size: 16px;
   }
 }
+
+/* ---------- Sign-in pages ---------- */
+.cp-auth {
+  display: flex;
+  flex-direction: column;
+}
+.cp-auth__main {
+  flex: 1;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 48px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cp-auth__card {
+  padding: 28px;
+  gap: 18px;
+}
+.cp-auth__title {
+  font-size: 22px;
+}
+.cp-auth__intro p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.cp-auth__submit {
+  width: 100%;
+  margin-left: 0;
+}
+.cp-auth__error {
+  margin: 0;
+  font-size: 13px;
+}
+.cp-auth__help {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.cp-auth__steps {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14px;
+}
+.cp-auth__qr {
+  display: block;
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.cp-auth__key {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--nest);
+  padding: 2px 6px;
+  border-radius: 3px;
+  overflow-wrap: anywhere;
+}
+.cp-auth__code {
+  font-family: var(--mono);
+  font-size: 22px;
+  letter-spacing: 6px;
+  text-align: center;
+}
+
+/* ---------- Account menu ---------- */
+.cp-account {
+  position: relative;
+}
+.cp-account__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 240px;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 40;
+  box-shadow: 0 8px 24px rgba(18, 18, 43, 0.15);
+}
+.cp-account__menu span {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.cp-account__menu .cp-btn {
+  width: 100%;
+}
+.cp .cp-menu__signout {
+  min-height: 44px;
+  width: 100%;
+  text-align: left;
+  color: var(--gold);
+  font-weight: 700;
+}
+
+/* ---------- Admin ---------- */
+.cp-admin__header {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 76px;
+  padding-block: 10px;
+}
+.cp-admin__nav {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.cp .cp-admin__nav a {
+  color: var(--on-navy);
+  padding: 10px;
+}
+.cp .cp-admin__nav a[aria-current='page'] {
+  color: var(--gold);
+  font-weight: 700;
+}
+.cp-admin__signout {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--on-navy-muted);
+  font-size: 13px;
+}
+.cp-admin__signout button {
+  color: var(--gold);
+  font-weight: 700;
+  min-height: 44px;
+}
+.cp-admin__title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+}
+.cp-admin__sub {
+  margin: 8px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+.cp-admin__table {
+  overflow-x: auto;
+}
+.cp-admin__table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.cp-admin__table th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--gold-line);
+  white-space: nowrap;
+}
+.cp-admin__table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.cp-admin__message {
+  min-width: 240px;
+  max-width: 480px;
+  white-space: pre-wrap;
+}
+.cp-admin__disabled td {
+  color: var(--muted);
+}
+.cp-admin__tag {
+  display: inline-block;
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--nest);
+  border: 1px solid var(--line);
+}
+.cp-admin__tag--urgent {
+  background: var(--warn-bg);
+  border-color: var(--warn);
+}
+.cp-admin__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+.cp-admin__formfoot {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.cp-admin__formfoot .cp-btn {
+  margin-left: 0;
+}
+.cp-admin__ok {
+  font-size: 13px;
+  color: var(--success-ink);
+}
+.cp-admin__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 170px;
+}
+.cp-admin__inline .cp-btn {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.cp-admin__inline .cp-admin__formfoot {
+  gap: 6px;
+}

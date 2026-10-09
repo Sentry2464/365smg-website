@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ALL_SITES, sites, siteLabel, me, type SiteId } from './data'
+import { signOut } from '@/app/portal/actions'
+import { usePortal } from './context'
+import { ALL_SITES, siteLabel, type SiteId } from './data'
 
 const navItems = ['Home', 'Alerts', 'Intel map', 'Briefings', 'Podcasts', 'Security tips', 'Investigations']
 
@@ -12,21 +14,69 @@ export function SiteSelect({
   value,
   onChange,
   className,
+  includeAll = true,
 }: {
   id: string
   value: SiteId
   onChange: (id: SiteId) => void
   className?: string
+  includeAll?: boolean
 }) {
+  const { sites } = usePortal()
   return (
     <select id={id} className={className} value={value} onChange={(e) => onChange(e.target.value)}>
       {sites.map((s) => (
         <option key={s.id} value={s.id}>
-          {siteLabel(s.id)}
+          {siteLabel(s.id, sites)}
         </option>
       ))}
-      <option value={ALL_SITES}>{siteLabel(ALL_SITES)}</option>
+      {includeAll && sites.length > 1 && <option value={ALL_SITES}>{siteLabel(ALL_SITES, sites)}</option>}
     </select>
+  )
+}
+
+function AccountMenu() {
+  const { user } = usePortal()
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', close)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', close)
+    }
+  }, [open])
+
+  return (
+    <div className="cp-account" ref={ref}>
+      <button
+        type="button"
+        className="cp-avatar"
+        aria-label={`Account: ${user.name}`}
+        aria-expanded={open}
+        aria-controls="cp-account-menu"
+        onClick={() => setOpen((o) => !o)}
+      >
+        {user.initials}
+      </button>
+      {open && (
+        <div id="cp-account-menu" className="cp-account__menu">
+          <b>{user.name}</b>
+          <span>{user.email}</span>
+          <form action={signOut}>
+            <button type="submit" className="cp-btn cp-btn--ghost">
+              Sign out
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -57,9 +107,7 @@ export function PortalHeader({ siteId, onSiteChange }: { siteId: SiteId; onSiteC
               <label htmlFor="cp-site-header">Site</label>
               <SiteSelect id="cp-site-header" value={siteId} onChange={onSiteChange} />
             </div>
-            <div className="cp-avatar" role="img" aria-label={`Account: ${me.firstName}`}>
-              {me.initials}
-            </div>
+            <AccountMenu />
           </div>
           <button
             type="button"
@@ -79,6 +127,11 @@ export function PortalHeader({ siteId, onSiteChange }: { siteId: SiteId; onSiteC
                 {label}
               </a>
             ))}
+            <form action={signOut}>
+              <button type="submit" className="cp-menu__signout">
+                Sign out
+              </button>
+            </form>
           </nav>
         )}
       </header>

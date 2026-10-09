@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily consistent copy of the portal database
+
+[Service]
+Type=oneshot
+User=smg
+Group=smg
+# sqlite3 .backup takes a consistent snapshot while the app is running.
+ExecStart=/bin/sh -c 'sqlite3 /var/lib/smg/portal.db ".backup /var/lib/smg/backups/portal-$(date +%%F).db" && find /var/lib/smg/backups -name "portal-*.db" -mtime +14 -delete'

@@ -81,10 +81,11 @@ the internet only, and nothing to private networks.
 
 ```bash
 VLAN=none MGMT_CIDR=10.1.10.0/23 SSH_KEY_FILE=/root/smgadmin.pub \
-IP_CIDR=10.1.11.50/23 GATEWAY=10.1.10.1 DNS=10.1.10.1 bash ./create-vm.sh
+IP_CIDR=<free-LAN-IP>/23 GATEWAY=10.1.10.1 DNS=10.1.10.1 bash ./create-vm.sh
 ```
 
-Pick a free LAN address outside your DHCP range. The script refuses to run until the
+Replace `<free-LAN-IP>` with an address outside your DHCP range that nothing uses: check
+that it doesn't answer `ping` and isn't in the router's DHCP leases or ARP table. The script refuses to run until the
 Proxmox firewall is enabled, because here it's the only thing keeping the VM apart from
 the LAN. Enable it safely: *Datacenter › Firewall › Options*, set **Input Policy** to
 `ACCEPT` first (so your own access to the host over LAN and Tailscale is unaffected),

@@ -60,10 +60,10 @@ else
   TAG=",tag=$VLAN"
 fi
 
-# VLAN tagging needs a VLAN-aware bridge.
+# A VLAN-aware bridge isn't required: on a plain bridge Proxmox gives this VM its own
+# VLAN device and bridge (e.g. vmbr0v50) at start, leaving vmbr0 and every other guest untouched.
 if [ -n "$TAG" ] && [ "$(cat "/sys/class/net/$BRIDGE/bridge/vlan_filtering" 2>/dev/null)" != "1" ]; then
-  die "bridge $BRIDGE is not VLAN aware. In the Proxmox UI: Node > System > Network >
-       $BRIDGE > tick 'VLAN aware', apply, then rerun"
+  echo "==> $BRIDGE is not VLAN aware; Proxmox will create a separate VLAN $VLAN bridge for this VM only"
 fi
 
 echo "==> Downloading and verifying Ubuntu 24.04 cloud image"

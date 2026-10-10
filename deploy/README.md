@@ -48,8 +48,9 @@ On your router/firewall and switches:
 
 The Proxmox VM firewall (step 2) enforces the same rules a second time on the host.
 
-On the Proxmox host, the bridge must be **VLAN aware**: *Node › System › Network › vmbr0 ›
-tick "VLAN aware" › Apply Configuration*. `create-vm.sh` checks this.
+On the Proxmox host, `vmbr0` does **not** need to be VLAN aware. When it isn't, Proxmox
+gives the tagged VM its own VLAN device and bridge (`vmbr0v50`) when the VM starts, so
+`vmbr0` and the other guests are never touched.
 
 ## 2. Create the VM (on the Proxmox host)
 

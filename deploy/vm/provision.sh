@@ -74,7 +74,19 @@ install -d -o "$APP_USER" -g "$APP_USER" -m 0700 "$APP_DIR/.ssh"
 if [ ! -f "$APP_DIR/.ssh/id_ed25519" ]; then
   sudo -u "$APP_USER" ssh-keygen -q -t ed25519 -N '' -C "smg-portal deploy key" -f "$APP_DIR/.ssh/id_ed25519"
 fi
-sudo -u "$APP_USER" sh -c "ssh-keyscan -t ed25519 github.com >> $APP_DIR/.ssh/known_hosts 2>/dev/null"
+# VLAN 50 only allows web ports out, so reach GitHub's SSH service on port 443.
+cat > "$APP_DIR/.ssh/config" <<'SSHCFG'
+Host github.com
+  HostName ssh.github.com
+  Port 443
+  User git
+  IdentityFile ~/.ssh/id_ed25519
+SSHCFG
+chown "$APP_USER:$APP_USER" "$APP_DIR/.ssh/config"
+chmod 600 "$APP_DIR/.ssh/config"
+if ! grep -q '^\[ssh.github.com\]:443 ' "$APP_DIR/.ssh/known_hosts" 2>/dev/null; then
+  sudo -u "$APP_USER" sh -c "ssh-keyscan -p 443 -t ed25519 ssh.github.com >> $APP_DIR/.ssh/known_hosts 2>/dev/null"
+fi
 install -m 0755 "$HERE/deploy.sh" /usr/local/bin/smg-deploy
 
 echo "==> Settings file /etc/smg-portal.env"

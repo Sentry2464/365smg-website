@@ -10,8 +10,12 @@ export function proxy(request: NextRequest) {
   if (process.env.PORTAL_ONLY !== '1' && !PORTAL_HOSTS.includes(host)) return NextResponse.next()
 
   const { pathname } = request.nextUrl
-  // Relative Location: request.url carries the server's internal address, not the public hostname.
-  if (pathname === '/') return new NextResponse(null, { status: 307, headers: { Location: '/portal' } })
+  if (pathname === '/') {
+    // Next needs an absolute Location. Behind the tunnel, request.url carries the internal
+    // address, so use the public hostname when it's ours (never an arbitrary Host header).
+    const target = PORTAL_HOSTS.includes(host) ? `https://${host}/portal` : new URL('/portal', request.url)
+    return NextResponse.redirect(target, 307)
+  }
   if (PORTAL_PATHS.test(pathname)) return NextResponse.next()
   return new NextResponse('Not found', { status: 404 })
 }

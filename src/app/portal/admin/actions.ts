@@ -42,7 +42,7 @@ export async function addClient(_: AdminState, form: FormData): Promise<AdminSta
       industryPlural: field(form, 'industryPlural'),
       managerEmail: field(form, 'managerEmail'),
     })
-    return { message: `Added ${c.name}. Now add its sites and users.` }
+    return { message: `Added ${c.name}. Open it from the list to add its sites and users.` }
   })
 }
 

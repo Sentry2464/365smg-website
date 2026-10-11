@@ -2,10 +2,11 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { db } from '@/server/db'
 import { requireUser } from '@/server/session'
-import { clientScope, getClient } from '@/server/store'
-import { addSite } from '../../actions'
+import { clientScope, getClient, listUsers } from '@/server/store'
+import { addSite, addUser } from '../../actions'
 import { AdminForm } from '../../AdminForm'
-import { AdminShell } from '../../AdminShell'
+import { AdminShell, fmtDate } from '../../AdminShell'
+import { UserActions } from '../../UserActions'
 
 export const metadata: Metadata = { title: 'Client | 365 SMG Client Portal' }
 
@@ -15,6 +16,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   const client = getClient(db(), id)
   if (!client) notFound()
   const sites = clientScope(db(), id).sites()
+  const users = listUsers(db()).filter((u) => u.client_id === id)
 
   return (
     <AdminShell role={user.role} name={user.name} current="/portal/admin" title={client.name}>
@@ -80,6 +82,63 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
               <option value="America/Denver">Mountain</option>
               <option value="America/Los_Angeles">Pacific</option>
             </select>
+          </div>
+        </AdminForm>
+      </section>
+
+      <section className="cp-card">
+        <div className="cp-card__head">
+          <h2 className="cp-card__title">Users</h2>
+          <span className="cp-card__sub">
+            People at {client.name} who can sign in. Each gets a temporary password and sets up an authenticator app on
+            first sign-in.
+          </span>
+        </div>
+        <div className="cp-admin__table">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Two-step</th>
+                <th>Last sign-in</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} className={u.disabled_at ? 'cp-admin__disabled' : undefined}>
+                  <td>
+                    {u.name}
+                    {u.disabled_at && <span className="cp-admin__tag">Disabled</span>}
+                  </td>
+                  <td>{u.email}</td>
+                  <td>{u.totp_enabled_at ? 'On' : 'Not set up'}</td>
+                  <td>{fmtDate(u.last_login_at)}</td>
+                  <td>
+                    <UserActions userId={u.id} disabled={!!u.disabled_at} self={false} />
+                  </td>
+                </tr>
+              ))}
+              {users.length === 0 && (
+                <tr>
+                  <td colSpan={5}>No users yet. Add the first one below.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <h3 className="cp-admin__sub">Add a user</h3>
+        <AdminForm action={addUser} submitLabel="Create user" className="cp-form cp-admin__grid">
+          <input type="hidden" name="role" value="client" />
+          <input type="hidden" name="clientId" value={client.id} />
+          <div className="cp-field">
+            <label htmlFor="cu-name">Full name</label>
+            <input id="cu-name" name="name" className="cp-input" required />
+          </div>
+          <div className="cp-field">
+            <label htmlFor="cu-email">Email</label>
+            <input id="cu-email" name="email" type="email" className="cp-input" required />
           </div>
         </AdminForm>
       </section>

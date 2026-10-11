@@ -81,11 +81,14 @@ Host github.com
   Port 443
   User git
   IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes
 SSHCFG
 chown "$APP_USER:$APP_USER" "$APP_DIR/.ssh/config"
 chmod 600 "$APP_DIR/.ssh/config"
 if ! grep -q '^\[ssh.github.com\]:443 ' "$APP_DIR/.ssh/known_hosts" 2>/dev/null; then
-  sudo -u "$APP_USER" sh -c "ssh-keyscan -p 443 -t ed25519 ssh.github.com >> $APP_DIR/.ssh/known_hosts 2>/dev/null"
+  keys=$(ssh-keyscan -p 443 -t ed25519 ssh.github.com 2>/dev/null)
+  [ -n "$keys" ] || { echo "error: cannot reach ssh.github.com:443 to fetch GitHub's host key" >&2; exit 1; }
+  echo "$keys" | sudo -u "$APP_USER" tee -a "$APP_DIR/.ssh/known_hosts" >/dev/null
 fi
 install -m 0755 "$HERE/deploy.sh" /usr/local/bin/smg-deploy
 

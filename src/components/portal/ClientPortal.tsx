@@ -128,13 +128,18 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
             </div>
           </div>
 
+          <p className="cp-notice" role="note">
+            <b>Preview.</b> Live alerts, weather and news are being connected. Until then, the news ticker, weather,
+            news, tips and briefings shown here are sample content.
+          </p>
+
           <div className="cp-mpicker">
             <label htmlFor="cp-site-mobile">Site</label>
             <SiteSelect id="cp-site-mobile" className="cp-input" value={siteId} onChange={changeSite} />
           </div>
 
           <div className="cp-dash">
-            <IntelMap siteId={siteId} incidents={feed.incidents} />
+            <IntelMap siteId={siteId} incidents={feed.incidents} demo={feed.demo} />
             <WeatherCard site={site ?? sites[0]} />
             <AlertsCard alerts={siteAlerts} />
             <NewsCard />

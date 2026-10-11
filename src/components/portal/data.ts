@@ -90,6 +90,8 @@ export interface Feed {
   alerts: Alert[]
   summaries: Record<SiteId, SiteSummary>
   incidents: MapIncident[]
+  /** Demo data: also shows the sample weather warning on the map. */
+  demo: boolean
 }
 
 // Sample feed from the design, shown only for the demo client's sites (matched
@@ -135,7 +137,17 @@ const sampleThreat: Record<string, ThreatLevel> = {
   'lake-nona-commons': 'ELEVATED',
 }
 
-export function sampleFeed(sites: (Site & { slug: string })[]): Feed {
+/**
+ * Site-specific sample alerts, incidents and threat levels, for demo data only. `demo`
+ * must be set explicitly (development or SMG_DEMO=1): a real client's site that happens
+ * to share a demo slug must never show invented incidents as if they were real.
+ */
+export function sampleFeed(sites: (Site & { slug: string })[], { demo }: { demo: boolean }): Feed {
+  if (!demo) {
+    const summaries: Record<SiteId, SiteSummary> = { [ALL_SITES]: { threatLevel: 'LOW', activeAlertId: null } }
+    for (const s of sites) summaries[s.id] = { threatLevel: 'LOW', activeAlertId: null }
+    return { alerts: [], summaries, incidents: [], demo: false }
+  }
   const bySlug = new Map(sites.map((s) => [s.slug, s.id]))
   const isDemo = sites.some((s) => s.slug in sampleThreat)
   const alerts: Alert[] = isDemo
@@ -156,7 +168,7 @@ export function sampleFeed(sites: (Site & { slug: string })[]): Feed {
   const incidents = sampleIncidents
     .filter((i) => bySlug.has(i.siteSlug))
     .map(({ siteSlug, ...i }) => ({ ...i, siteId: bySlug.get(siteSlug)! }))
-  return { alerts, summaries, incidents }
+  return { alerts, summaries, incidents, demo: true }
 }
 
 /**

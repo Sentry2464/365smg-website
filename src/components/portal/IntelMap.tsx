@@ -9,7 +9,15 @@ type Layer = (typeof LAYERS)[number]
 
 // Placeholder map: positioned overlays on a grid. Phase 5 swaps the canvas for
 // MapLibre GL; the pills, legend and expand behaviour stay as they are.
-export function IntelMap({ siteId, incidents }: { siteId: SiteId; incidents: MapIncident[] }) {
+export function IntelMap({
+  siteId,
+  incidents,
+  demo,
+}: {
+  siteId: SiteId
+  incidents: MapIncident[]
+  demo: boolean
+}) {
   const { sites } = usePortal()
   const [layers, setLayers] = useState<Record<Layer, boolean>>({
     Weather: true,
@@ -63,7 +71,7 @@ export function IntelMap({ siteId, incidents }: { siteId: SiteId; incidents: Map
             <div className="cp-map__road-v" />
             <div className="cp-map__lake" />
 
-            {layers.Weather && (
+            {layers.Weather && demo && (
               <>
                 <div className="cp-map__nws" />
                 <span className="cp-map__tag" style={{ left: '8%', top: '10%', color: '#245C96' }}>

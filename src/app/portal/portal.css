@@ -1858,3 +1858,19 @@ textarea.cp-input {
 .cp-admin__inline .cp-admin__formfoot {
   gap: 6px;
 }
+
+/* Shown until live feeds replace the sample content (Phase 4). */
+.cp-notice {
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  border: 1px solid var(--gold-line);
+  border-left: 3px solid var(--gold);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.cp-notice b {
+  color: var(--gold-dim);
+}

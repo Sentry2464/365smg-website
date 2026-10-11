@@ -6,6 +6,8 @@ import { requireUser } from '@/server/session'
 import { clientScope } from '@/server/store'
 
 const THREATS: ThreatLevel[] = ['LOW', 'ELEVATED', 'HIGH']
+// Sample site alerts only in development or when explicitly enabled (never on the live VM).
+const DEMO = process.env.NODE_ENV !== 'production' || process.env.SMG_DEMO === '1'
 
 // Design-review states, e.g. /portal?state=no-alert,empty-alerts,sent&threat=HIGH
 export default async function PortalPage({
@@ -51,7 +53,7 @@ export default async function PortalPage({
       }}
       client={{ name: client.name, industry: client.industry, industryPlural: client.industry_plural }}
       sites={sites}
-      feed={sampleFeed(sites)}
+      feed={sampleFeed(sites, { demo: DEMO })}
       updatedAt={new Date().toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',

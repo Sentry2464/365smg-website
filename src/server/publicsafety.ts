@@ -1,6 +1,6 @@
 import type { Database } from 'better-sqlite3'
 import type { Severity } from '@/components/portal/data'
-import { errorText, type FeedAlert, setStatus, syncSiteAlerts, userAgent } from './alerts'
+import { errorText, type FeedAlert, fetchRetry, setStatus, syncSiteAlerts, userAgent } from './alerts'
 
 // National public-safety feeds:
 // - DHS National Terrorism Advisory System (NTAS): an active advisory is shown to every
@@ -122,7 +122,7 @@ export function parseWanted(json: unknown): WantedItem[] {
 }
 
 /** Refreshes each field office's list. A withdrawn notice disappears with the next fetch. */
-export async function pollWanted(db: Database, fetchImpl: typeof fetch = fetch) {
+export async function pollWanted(db: Database, fetchImpl: typeof fetch = fetch, retry = {}) {
   const save = db.prepare(
     `INSERT INTO feed_cache (key, json) VALUES (?, ?)
      ON CONFLICT(key) DO UPDATE SET json = excluded.json, fetched_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`,
@@ -130,10 +130,14 @@ export async function pollWanted(db: Database, fetchImpl: typeof fetch = fetch) 
   const errors: string[] = []
   for (const office of fieldOffices()) {
     try {
-      const res = await fetchImpl(`${FBI}?field_offices=${office}&pageSize=50`, {
-        headers: { 'User-Agent': userAgent() },
-        signal: AbortSignal.timeout(20_000),
-      })
+      // api.fbi.gov is behind Cloudflare, which refuses some requests at random: retry, and
+      // on failure keep showing the last good list (only a successful fetch replaces it).
+      const res = await fetchRetry(
+        fetchImpl,
+        `${FBI}?field_offices=${office}&pageSize=50`,
+        { headers: { 'User-Agent': userAgent(), Accept: 'application/json' } },
+        retry,
+      )
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.headers.get('server') ?? ''}`.trim())
       save.run(`fbi-wanted:${office}`, JSON.stringify(parseWanted(await res.json())))
     } catch (err) {

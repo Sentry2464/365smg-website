@@ -91,3 +91,20 @@ describe('FBI Wanted', () => {
     expect(wantedList(db)[0].items.map((i) => i.uid)).toEqual(['b'])
   })
 })
+
+describe('FBI Wanted retries', () => {
+  it('retries a Cloudflare 403 and keeps the last good list when every try fails', async () => {
+    let calls = 0
+    const flaky = (async () => {
+      calls++
+      return calls === 1 ? new Response('blocked', { status: 403 }) : Response.json({ items: [fbiItem('a', 'JOHN DOE', '2026-09-01')] })
+    }) as unknown as typeof fetch
+    await pollWanted(db, flaky, { minDelayMs: 1, maxDelayMs: 2 })
+    expect(calls).toBe(2)
+    expect(wantedList(db)[0].items.map((i) => i.uid)).toEqual(['a'])
+
+    const down = (async () => new Response('blocked', { status: 403 })) as unknown as typeof fetch
+    await pollWanted(db, down, { minDelayMs: 1, maxDelayMs: 2 })
+    expect(wantedList(db)[0].items.map((i) => i.uid)).toEqual(['a'])
+  })
+})

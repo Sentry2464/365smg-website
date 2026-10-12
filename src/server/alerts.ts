@@ -51,6 +51,26 @@ export function userAgent() {
   return `365SMG-ClientPortal (portal.365smg.com, ${process.env.SMG_API_CONTACT || 'admin@365securitymg.com'})`
 }
 
+/**
+ * fetch with a few retries on rate limits, bot challenges (403) and server errors, with a
+ * jittered pause between tries. Some feeds sit behind Cloudflare and refuse requests at random.
+ */
+export async function fetchRetry(
+  fetchImpl: typeof fetch,
+  url: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+  { tries = 3, minDelayMs = 3_000, maxDelayMs = 10_000 } = {},
+) {
+  const { timeoutMs = 20_000, ...rest } = init
+  let res: Response | undefined
+  for (let attempt = 1; ; attempt++) {
+    res = await fetchImpl(url, { ...rest, signal: AbortSignal.timeout(timeoutMs) })
+    const retryable = res.status === 403 || res.status === 429 || res.status >= 500
+    if (!retryable || attempt >= tries) return res
+    await new Promise((r) => setTimeout(r, minDelayMs + Math.random() * (maxDelayMs - minDelayMs)))
+  }
+}
+
 /** A readable reason for a failed request (fetch errors often hide it in `cause`). */
 export function errorText(err: unknown) {
   if (!(err instanceof Error)) return String(err)

@@ -37,6 +37,7 @@ export async function submitFeedback(input: {
         '',
         `All feedback: ${portalUrl('/portal/admin/feedback')}`,
       ].join('\n'),
+      { cc: process.env.NOTIFY_FEEDBACK_CC },
     )
     const replyBy = new Date(`${row.reply_by}T12:00:00`).toLocaleDateString('en-US', {
       weekday: 'long',
@@ -72,6 +73,7 @@ export async function submitInvestigation(input: {
         'For confidentiality, the details are only in the portal. Sign in to read and assign it:',
         portalUrl('/portal/admin/investigations'),
       ].join('\n'),
+      { cc: process.env.NOTIFY_INVESTIGATIONS_CC },
     )
     return { ok: true, caseRef: row.case_ref }
   } catch (err) {

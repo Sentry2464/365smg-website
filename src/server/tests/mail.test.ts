@@ -66,3 +66,22 @@ describe('mail via Microsoft Graph', () => {
     expect(mailProvider()).toBe('log')
   })
 })
+
+describe('cc', () => {
+  it('copies extra recipients, minus anyone already in To', async () => {
+    const g = graph([new Response(null, { status: 202 })])
+    await deliver('laura.g@365securitymg.com', 'Feedback', 'Text', g.impl, {
+      cc: 'jaliaga@365securitymg.com, Laura.G@365securitymg.com, jaliaga@365securitymg.com',
+    })
+    const body = JSON.parse(String(g.calls.find((c) => c.url.includes('sendMail'))!.init.body))
+    expect(body.message.toRecipients).toEqual([{ emailAddress: { address: 'laura.g@365securitymg.com' } }])
+    expect(body.message.ccRecipients).toEqual([{ emailAddress: { address: 'jaliaga@365securitymg.com' } }])
+  })
+
+  it('sends no cc field when there is nothing to copy', async () => {
+    const g = graph([new Response(null, { status: 202 })])
+    await deliver('a@b.test', 's', 't', g.impl, { cc: 'A@b.test' })
+    const body = JSON.parse(String(g.calls.find((c) => c.url.includes('sendMail'))!.init.body))
+    expect(body.message.ccRecipients).toBeUndefined()
+  })
+})

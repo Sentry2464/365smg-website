@@ -46,7 +46,7 @@ async function graphToken(fetchImpl) {
   return token.value
 }
 
-async function sendGraph(to, subject, text, fetchImpl) {
+async function sendGraph(to, cc, subject, text, fetchImpl) {
   const from = process.env.MAIL_FROM
   if (!from) throw new Error('MAIL_FROM must be set')
   const body = JSON.stringify({
@@ -54,7 +54,8 @@ async function sendGraph(to, subject, text, fetchImpl) {
       subject,
       body: { contentType: 'Text', content: text },
       from: { emailAddress: { address: from, name: process.env.MAIL_FROM_NAME || '365 SMG Client Portal' } },
-      toRecipients: to.split(',').map((a) => ({ emailAddress: { address: a.trim() } })),
+      toRecipients: to.map((address) => ({ emailAddress: { address } })),
+      ...(cc.length ? { ccRecipients: cc.map((address) => ({ emailAddress: { address } })) } : {}),
     },
     saveToSentItems: false,
   })
@@ -85,7 +86,7 @@ async function sendGraph(to, subject, text, fetchImpl) {
 
 let transport = null
 
-async function sendSmtp(to, subject, text) {
+async function sendSmtp(to, cc, subject, text) {
   if (!transport) {
     const nodemailer = (await import('nodemailer')).default
     transport = nodemailer.createTransport({
@@ -95,23 +96,48 @@ async function sendSmtp(to, subject, text) {
       auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
     })
   }
-  await transport.sendMail({ from: process.env.SMTP_FROM || 'Client Portal <portal@365securitymg.com>', to, subject, text })
+  await transport.sendMail({
+    from: process.env.SMTP_FROM || 'Client Portal <portal@365securitymg.com>',
+    to: to.join(', '),
+    ...(cc.length ? { cc: cc.join(', ') } : {}),
+    subject,
+    text,
+  })
+}
+
+/** "a@x, b@y" (or a list) to unique, trimmed addresses, compared case-insensitively. */
+export function addressList(...lists) {
+  const seen = new Set()
+  const out = []
+  for (const list of lists) {
+    for (const a of (Array.isArray(list) ? list : String(list ?? '').split(',')).map((x) => String(x).trim())) {
+      if (a && !seen.has(a.toLowerCase())) {
+        seen.add(a.toLowerCase())
+        out.push(a)
+      }
+    }
+  }
+  return out
 }
 
 /**
- * Sends a plain-text email. Throws on failure; callers that must never fail (form
- * submissions) use notify() instead.
+ * Sends a plain-text email to `to` (comma-separated), with optional `cc`. Addresses already
+ * in `to` are dropped from `cc`. Throws on failure; callers that must never fail (form
+ * submissions) catch and log.
  */
-export async function deliver(to, subject, text, fetchImpl = fetch) {
+export async function deliver(to, subject, text, fetchImpl = fetch, { cc = '' } = {}) {
+  const toList = addressList(to)
+  const ccList = addressList(cc).filter((a) => !toList.some((t) => t.toLowerCase() === a.toLowerCase()))
   const provider = mailProvider()
-  if (provider === 'graph') await sendGraph(to, subject, text, fetchImpl)
-  else if (provider === 'smtp') await sendSmtp(to, subject, text)
+  const who = `to=${toList.join(',')}${ccList.length ? ` cc=${ccList.join(',')}` : ''}`
+  if (provider === 'graph') await sendGraph(toList, ccList, subject, text, fetchImpl)
+  else if (provider === 'smtp') await sendSmtp(toList, ccList, subject, text)
   else {
-    console.info(`[mail] to=${to} subject=${JSON.stringify(subject)}\n${text}`)
+    console.info(`[mail] ${who} subject=${JSON.stringify(subject)}\n${text}`)
     return provider
   }
-  // Recipient and subject only (subjects never carry confidential details), for tracing deliveries.
-  console.info(`[mail] sent via ${provider} to=${to} subject=${JSON.stringify(subject)}`)
+  // Recipients and subject only (subjects never carry confidential details), for tracing deliveries.
+  console.info(`[mail] sent via ${provider} ${who} subject=${JSON.stringify(subject)}`)
   return provider
 }
 

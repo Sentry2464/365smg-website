@@ -174,7 +174,8 @@ someone loses their phone, confirm who they are, then use *Reset two-step*.
 
 **Email.** Staff notifications: feedback goes to each client's account manager
 (`NOTIFY_DEFAULT_TO` for clients without one), investigation requests to
-`NOTIFY_INVESTIGATIONS_TO` with the case reference only, never the details. Until mail is set
+`NOTIFY_INVESTIGATIONS_TO` with the case reference only, never the details. Add copies with
+`NOTIFY_FEEDBACK_CC` / `NOTIFY_INVESTIGATIONS_CC` (comma-separated). Until mail is set
 up, messages are written to `journalctl -u smg-portal` instead.
 
 Microsoft 365 (recommended; HTTPS only, no SMTP passwords): register an app in Entra, give

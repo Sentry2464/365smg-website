@@ -130,6 +130,9 @@ SMG_PUBLIC_URL=https://portal.365securitymg.com
 NOTIFY_INVESTIGATIONS_TO=
 # Feedback goes to each client's account manager; this catches clients without one.
 NOTIFY_DEFAULT_TO=
+# Optional copies (comma-separated): every feedback email, every investigation email.
+NOTIFY_FEEDBACK_CC=
+NOTIFY_INVESTIGATIONS_CC=
 ENV
   umask 022
 fi

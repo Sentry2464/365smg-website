@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Command-line tasks for the portal database. On the VM: sudo smg-admin <command>
 //
-//   create-staff --email you@365smg.com --name "Your Name" [--role admin|investigator]
+//   create-staff --email you@365securitymg.com --name "Your Name" [--role admin|investigator]
 //       Creates a 365 SMG staff account and prints a one-time password.
 //   send-test-email --to someone@365securitymg.com
 //       Sends a test message with the portal's mail settings and reports the result.
@@ -62,7 +62,7 @@ async function addUser({ email, name, role, clientId = null, password }) {
 if (command === 'create-staff') {
   const { email, name, role } = values
   if (!email || !name || !['admin', 'investigator'].includes(role)) {
-    console.error('usage: create-staff --email you@365smg.com --name "Your Name" [--role admin|investigator]')
+    console.error('usage: create-staff --email you@365securitymg.com --name "Your Name" [--role admin|investigator]')
     process.exit(2)
   }
   if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) {
@@ -71,7 +71,7 @@ if (command === 'create-staff') {
   }
   const pass = await addUser({ email, name, role })
   console.log(`Created ${role} ${email}.\nTemporary password (shown once): ${pass}`)
-  console.log('Sign in at https://portal.365smg.com/portal/login to choose a password and set up two-step login.')
+  console.log('Sign in at https://portal.365securitymg.com/portal/login to choose a password and set up two-step login.')
 } else if (command === 'seed-demo') {
   if (process.env.NODE_ENV === 'production') {
     console.error('seed-demo is for development only.')
@@ -84,7 +84,7 @@ if (command === 'create-staff') {
   const client = (name, industry, plural) => {
     const id = newId()
     db.prepare('INSERT INTO clients (id, name, industry, industry_plural, manager_email) VALUES (?, ?, ?, ?, ?)').run(
-      id, name, industry, plural, 'accounts@365smg.com')
+      id, name, industry, plural, 'accounts@365smg.test')
     return id
   }
   const site = (clientId, slug, name, city, lat, lng) =>

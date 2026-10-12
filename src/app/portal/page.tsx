@@ -15,7 +15,7 @@ const THREATS: ThreatLevel[] = ['LOW', 'ELEVATED', 'HIGH']
 const DEMO =
   process.env.SMG_DEMO === '1' || (process.env.NODE_ENV !== 'production' && process.env.SMG_DEMO !== '0')
 
-/** God's Eye View base URL (e.g. https://globe.365smg.com). Unset: the placeholder map. */
+/** God's Eye View base URL (e.g. https://globe.365securitymg.com). Unset: the placeholder map. */
 function globeUrl() {
   const raw = process.env.SMG_GLOBE_URL
   if (!raw) return undefined

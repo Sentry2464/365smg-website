@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Portal database tasks, run as the app user. See scripts/portal-admin.mjs.
-#   sudo smg-admin create-staff --email you@365smg.com --name "Your Name" [--role investigator]
+#   sudo smg-admin create-staff --email you@365securitymg.com --name "Your Name" [--role investigator]
 #   sudo smg-admin send-test-email --to you@365securitymg.com
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }

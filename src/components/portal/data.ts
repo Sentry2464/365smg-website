@@ -68,7 +68,7 @@ export interface Weather {
 
 export const contact = {
   phone: '(321) 430-0193',
-  email: 'ops@365smg.com',
+  email: 'admin@365securitymg.com',
   replyBusinessDays: 2,
   piLicense: '[A#######]',
 }

@@ -78,7 +78,7 @@ fi
 echo "==> Creating VM $VMID ($NAME) on $BRIDGE${TAG:+, VLAN $VLAN}"
 qm create "$VMID" \
   --name "$NAME" \
-  --description "365 SMG Client Portal (portal.365smg.com). Created by deploy/proxmox/create-vm.sh" \
+  --description "365 SMG Client Portal (portal.365securitymg.com). Created by deploy/proxmox/create-vm.sh" \
   --ostype l26 --machine q35 --cpu host --cores "$CORES" --memory "$MEMORY_MB" \
   --scsihw virtio-scsi-single \
   --net0 "virtio,bridge=$BRIDGE$TAG,firewall=1" \

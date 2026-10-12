@@ -8,7 +8,7 @@
 // Neither configured:      messages are written to the server log instead.
 
 const UA = () =>
-  `365SMG-ClientPortal (portal.365smg.com, ${process.env.SMG_API_CONTACT || 'admin@365securitymg.com'})`
+  `365SMG-ClientPortal (portal.365securitymg.com, ${process.env.SMG_API_CONTACT || 'admin@365securitymg.com'})`
 
 export function mailProvider() {
   const p = (process.env.SMG_MAIL_PROVIDER || '').toLowerCase()
@@ -95,7 +95,7 @@ async function sendSmtp(to, subject, text) {
       auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
     })
   }
-  await transport.sendMail({ from: process.env.SMTP_FROM || 'Client Portal <portal@365smg.com>', to, subject, text })
+  await transport.sendMail({ from: process.env.SMTP_FROM || 'Client Portal <portal@365securitymg.com>', to, subject, text })
 }
 
 /**

@@ -1,7 +1,7 @@
 # Deploying the Client Portal on Proxmox
 
 The client portal runs on its own Ubuntu 24.04 VM on VLAN 50 and is published at
-**https://portal.365smg.com** through a Cloudflare Tunnel. The VM accepts no inbound web
+**https://portal.365securitymg.com** through a Cloudflare Tunnel. The VM accepts no inbound web
 traffic: `cloudflared` makes an outbound connection to Cloudflare, and Next.js listens on
 `127.0.0.1:3000` only. On this VM, `/` redirects to `/portal` and the marketing pages
 return 404 (`PORTAL_ONLY=1`, see `src/proxy.ts`).
@@ -123,16 +123,16 @@ title `smg-portal VM`, **leave "Allow write access" off**.
 
 ## 4. Cloudflare Tunnel and Access
 
-Requires the `365smg.com` DNS zone to be on Cloudflare.
+Requires the `365securitymg.com` DNS zone to be on Cloudflare.
 
 1. In Cloudflare **Zero Trust › Networks › Tunnels › Create a tunnel**, choose *Cloudflared*,
    name it `smg-portal`, and copy the token from the install command it shows.
 2. On the VM: `sudo cloudflared service install <TOKEN>`
-3. In the tunnel's **Public hostnames** tab, add: subdomain `portal`, domain `365smg.com`,
+3. In the tunnel's **Public hostnames** tab, add: subdomain `portal`, domain `365securitymg.com`,
    service type `HTTP`, URL `localhost:3000`.
 4. **Until clients start using it**, add a second gate: *Zero Trust › Access › Applications ›
-   Add › Self-hosted*, domain `portal.365smg.com`, policy *Allow* for emails ending in
-   `@365smg.com` (one-time PIN login). Delete this application when you open the portal to clients.
+   Add › Self-hosted*, domain `portal.365securitymg.com`, policy *Allow* for emails ending in
+   `@365securitymg.com` (one-time PIN login). Delete this application when you open the portal to clients.
 
 ## 5. Deploy, update, roll back
 
@@ -146,18 +146,18 @@ Each deploy builds into `/opt/smg-portal/releases/<time>-<commit>`, switches the
 `current` link, restarts the service and checks `http://127.0.0.1:3000/portal`. If the check
 fails it switches back automatically. The last 5 releases are kept.
 
-Then open https://portal.365smg.com: it should redirect to `/portal`.
+Then open https://portal.365securitymg.com: it should redirect to `/portal`.
 
 ## 6. Accounts and email
 
 Create your own admin account on the VM (it prints a one-time password):
 
 ```bash
-sudo smg-admin create-staff --email you@365smg.com --name "Your Name"
-sudo smg-admin create-staff --email pi@365smg.com --name "Investigator Name" --role investigator
+sudo smg-admin create-staff --email you@365securitymg.com --name "Your Name"
+sudo smg-admin create-staff --email pi@365securitymg.com --name "Investigator Name" --role investigator
 ```
 
-Sign in at https://portal.365smg.com: you choose a new password, then scan a QR code with
+Sign in at https://portal.365securitymg.com: you choose a new password, then scan a QR code with
 an authenticator app (Microsoft Authenticator, Google Authenticator, 1Password and so on).
 Every later sign-in asks for the 6-digit code.
 

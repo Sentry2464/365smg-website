@@ -116,7 +116,7 @@ SMTP_HOST=
 SMTP_PORT=587
 SMTP_USER=
 SMTP_PASS=
-SMTP_FROM=Client Portal <portal@365smg.com>
+SMTP_FROM=Client Portal <portal@365securitymg.com>
 # Contact sent to public data APIs (NWS etc.) in the User-Agent, as they ask.
 SMG_API_CONTACT=admin@365securitymg.com
 # Live alert feeds (see deploy/README.md, "Live alerts"). NWS weather is on by default.
@@ -125,7 +125,7 @@ SMG_FEED_OPD=0
 SMG_CRIME_RADIUS_MI=1
 
 # Public address used for links in emails.
-SMG_PUBLIC_URL=https://portal.365smg.com
+SMG_PUBLIC_URL=https://portal.365securitymg.com
 # Investigations alerts go only here (case reference only, never the details).
 NOTIFY_INVESTIGATIONS_TO=
 # Feedback goes to each client's account manager; this catches clients without one.
@@ -155,7 +155,7 @@ $(cat "$APP_DIR/.ssh/id_ed25519.pub")
 
 2. Then deploy:   sudo smg-deploy
 3. Create your own admin account:
-   sudo smg-admin create-staff --email you@365smg.com --name "Your Name"
+   sudo smg-admin create-staff --email you@365securitymg.com --name "Your Name"
 EOF
 [ -z "${CF_TUNNEL_TOKEN:-}" ] && echo "4. Cloudflare Tunnel not installed yet: sudo cloudflared service install <TOKEN>  (README step 4)"
 exit 0

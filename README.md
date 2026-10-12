@@ -57,5 +57,5 @@ npm test                            # login, two-step codes and data separation 
 
 - To review the extra design states, open
   `/portal?state=no-alert,empty-alerts,sent&threat=LOW` (any combination; `threat` is LOW, ELEVATED or HIGH).
-- Hosting: the portal runs on a Proxmox VM behind a Cloudflare Tunnel at portal.365smg.com. See
+- Hosting: the portal runs on a Proxmox VM behind a Cloudflare Tunnel at portal.365securitymg.com. See
   [`deploy/README.md`](deploy/README.md).

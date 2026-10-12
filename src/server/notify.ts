@@ -4,7 +4,7 @@ import { deliver } from './mail.mjs'
 // in development) is set in /etc/smg-portal.env; see src/server/mail.mjs.
 /** Public address of the portal, for links in emails. */
 export const portalUrl = (path = '') =>
-  `${(process.env.SMG_PUBLIC_URL || 'https://portal.365smg.com').replace(/\/$/, '')}${path}`
+  `${(process.env.SMG_PUBLIC_URL || 'https://portal.365securitymg.com').replace(/\/$/, '')}${path}`
 
 const SIGNATURE = [
   '',

@@ -50,7 +50,7 @@ export interface AlertRow {
 
 /** User-Agent for every outbound feed request: who we are and how to reach us, as the services ask. */
 export function userAgent() {
-  return `365SMG-ClientPortal (portal.365smg.com, ${process.env.SMG_API_CONTACT || 'admin@365securitymg.com'})`
+  return `365SMG-ClientPortal (portal.365securitymg.com, ${process.env.SMG_API_CONTACT || 'admin@365securitymg.com'})`
 }
 
 /**

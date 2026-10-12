@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 // The Proxmox VM serves only the client portal. On the portal hostname (or with
 // PORTAL_ONLY=1), send "/" to /portal and hide the marketing pages.
-const PORTAL_HOSTS = ['portal.365smg.com']
+const PORTAL_HOSTS = ['portal.365securitymg.com']
 const PORTAL_PATHS = /^\/(portal|api\/portal)(\/|$)/
 
 export function proxy(request: NextRequest) {

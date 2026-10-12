@@ -36,6 +36,10 @@ describe('DHS NTAS', () => {
       'National Terrorism Advisory: Elevated Threat · Heightened threat environment across the United States.',
     )
     expect(parseNtas(ntas(advisory.replace('Elevated Threat', 'Imminent Threat')))[0].severity).toBe('HIGH')
+    // Tolerant: self-closing, single quotes, no summary, extra children.
+    const [b] = parseNtas(ntas(`<alert type='Bulletin' start='2026-10-12T12:00:00Z'/>`))
+    expect(b).toMatchObject({ severity: 'MED', headline: 'National Terrorism Advisory: Bulletin' })
+    expect(parseNtas(ntas(`<alert type="Imminent Threat"><locations><location>X</location></locations></alert>`))).toHaveLength(1)
     expect(() => parseNtas('<html/>')).toThrow()
   })
 

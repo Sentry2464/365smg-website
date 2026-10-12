@@ -32,10 +32,14 @@ export function parseNtas(xml: string): FeedAlert[] {
   const body = xml.replace(/^﻿/, '')
   if (!/<alerts[\s>/]/.test(body)) throw new Error('NTAS feed has no alerts element')
   const out: FeedAlert[] = []
-  for (const m of body.matchAll(/<alert\b([^>]*)>([\s\S]*?)<\/alert>/g)) {
-    const attr = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(m[1])?.[1] ?? null
+  // Tolerant of self-closing alerts, single or double quotes, and extra child elements.
+  for (const m of body.matchAll(/<alert\b([^>]*?)(?:\/>|>([\s\S]*?)<\/alert>)/g)) {
+    const attr = (name: string) => {
+      const a = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(m[1])
+      return a ? (a[1] ?? a[2]).trim() || null : null
+    }
     const type = attr('type') ?? 'Bulletin'
-    const summary = text(/<summary>([\s\S]*?)<\/summary>/.exec(m[2])?.[1] ?? '')
+    const summary = text(/<summary[^>]*>([\s\S]*?)<\/summary>/.exec(m[2] ?? '')?.[1] ?? '')
     const start = attr('start')
     const end = attr('end')
     const severity: Severity = /imminent/i.test(type) ? 'HIGH' : 'MED'

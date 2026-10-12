@@ -33,6 +33,8 @@ export interface Alert {
   /** Where it happened, when the feed gives a point (police calls). */
   lat?: number | null
   lng?: number | null
+  /** Beyond the site's own area, shown because nothing closer is active. */
+  nearby?: boolean
 }
 
 export interface SiteSummary {
@@ -283,5 +285,6 @@ export function alertsForSite(alerts: Alert[], id: SiteId) {
 
 export function alertMeta(a: Alert, sites: Site[]) {
   const site = a.siteId ? sites.find((s) => s.id === a.siteId)?.shortName : 'All sites'
-  return [site, a.distanceMi != null ? `${a.distanceMi} mi` : null, a.time, a.source].filter(Boolean).join(' · ')
+  const dist = a.distanceMi != null ? `${a.nearby ? 'nearby, ' : ''}${a.distanceMi} mi` : null
+  return [site, dist, a.time, a.source].filter(Boolean).join(' · ')
 }

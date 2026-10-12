@@ -46,8 +46,9 @@ function incidentPins(alerts: Alert[]) {
       type: 'pin',
       latitude: a.lat,
       longitude: a.lng,
-      label: `${a.title} · ${a.source}`.slice(0, 120),
-      color: a.severity === 'HIGH' ? 'red' : 'amber',
+      label: `${a.nearby ? 'Nearby: ' : ''}${a.title} · ${a.source}`.slice(0, 120),
+      // Nearby context in a muted colour; at-site alerts by severity.
+      color: a.nearby ? 'green' : a.severity === 'HIGH' ? 'red' : 'amber',
     })
   }
   return pins
@@ -80,7 +81,7 @@ export function GlobeMap({ siteId, url, alerts }: { siteId: SiteId; url: string;
       layers: (Object.keys(LAYERS) as Layer[]).filter((l) => layers[l]).flatMap((l) => LAYERS[l]),
       annotations: [...located.map((s) => {
         // Worst alert at the site colours its pin and names the event.
-        const hit = alerts.find((a) => a.siteId === s.id || a.siteId === null)
+        const hit = alerts.find((a) => !a.nearby && (a.siteId === s.id || a.siteId === null))
         const color = hit?.severity === 'HIGH' ? 'red' : hit?.severity === 'MED' ? 'amber' : s.id === siteId ? 'cyan' : 'primary'
         return {
           type: 'pin',

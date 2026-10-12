@@ -28,6 +28,8 @@ export interface FeedAlert {
   lng?: number | null
   /** Distance from the site it's being linked to. */
   distanceMi?: number | null
+  /** Outer rings of the alert's area as [lon, lat] points, when the feed gives one (NWS). */
+  polygons?: number[][][]
 }
 
 export interface AlertRow {
@@ -92,6 +94,7 @@ export function nwsSeverity(severity: string | undefined, event: string): Severi
 
 interface NwsFeature {
   id?: string
+  geometry?: { type?: string; coordinates?: unknown } | null
   properties?: {
     id?: string
     '@id'?: string
@@ -127,9 +130,45 @@ export function parseNws(json: unknown): FeedAlert[] {
       area: p.areaDesc ?? null,
       startsAt: p.onset ?? p.effective ?? null,
       endsAt: p.ends ?? p.expires ?? null,
+      polygons: outerRings(f.geometry),
     })
   }
   return out
+}
+
+function outerRings(g: NwsFeature['geometry']): number[][][] | undefined {
+  if (g?.type === 'Polygon') return [(g.coordinates as number[][][])[0]]
+  if (g?.type === 'MultiPolygon') return (g.coordinates as number[][][][]).map((p) => p[0])
+  return undefined
+}
+
+/** Miles from a point to a polygon area (0 inside), on a local flat projection. */
+export function milesToArea(site: { lat: number; lng: number }, rings: number[][][]) {
+  const kx = 69.17 * Math.cos((site.lat * Math.PI) / 180)
+  const ky = 69.0
+  let best = Infinity
+  for (const ring of rings) {
+    const pts = ring.map(([lon, lat]) => [(lon - site.lng) * kx, (lat - site.lat) * ky])
+    let inside = false
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const [xi, yi] = pts[i]
+      const [xj, yj] = pts[j]
+      if (yi > 0 !== yj > 0 && 0 < ((xj - xi) * (0 - yi)) / (yj - yi) + xi) inside = !inside
+      // distance from the origin (the site) to segment i–j
+      const dx = xj - xi
+      const dy = yj - yi
+      const t = dx || dy ? Math.max(0, Math.min(1, -(xi * dx + yi * dy) / (dx * dx + dy * dy))) : 0
+      best = Math.min(best, Math.hypot(xi + t * dx, yi + t * dy))
+    }
+    if (inside) return 0
+  }
+  return best
+}
+
+/** A rough centre for an area, for a map pin. */
+function centreOf(rings: number[][][]) {
+  const pts = rings.flat()
+  return { lng: pts.reduce((s, p) => s + p[0], 0) / pts.length, lat: pts.reduce((s, p) => s + p[1], 0) / pts.length }
 }
 
 // ---------- storage ----------
@@ -151,7 +190,8 @@ export function syncSiteAlerts(
      VALUES (@id, @source, @event, @severity, @headline, @url, @area, @startsAt, @endsAt, @lat, @lng)
      ON CONFLICT(id) DO UPDATE SET event = excluded.event, severity = excluded.severity,
        headline = excluded.headline, url = excluded.url, area = excluded.area,
-       starts_at = excluded.starts_at, ends_at = excluded.ends_at, lat = excluded.lat, lng = excluded.lng,
+       starts_at = excluded.starts_at, ends_at = excluded.ends_at,
+       lat = COALESCE(excluded.lat, alerts.lat), lng = COALESCE(excluded.lng, alerts.lng),
        last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`,
   )
   const link = db.prepare(
@@ -206,15 +246,37 @@ export async function pollNws(db: Database, fetchImpl: typeof fetch = fetch) {
   }
   let failures = 0
   let lastError = ''
+  const headers = { 'User-Agent': userAgent(), Accept: 'application/geo+json' }
+
+  // Statewide alerts, for "nearby" weather when nothing covers a site itself.
+  let regional: FeedAlert[] = []
+  if (sites.length) {
+    try {
+      const area = process.env.SMG_NWS_AREA || 'FL'
+      const res = await fetchImpl(`${NWS}/alerts/active?area=${area}`, { headers, signal: AbortSignal.timeout(20_000) })
+      if (!res.ok) throw new Error(`HTTP ${res.status} for area ${area}`)
+      regional = parseNws(await res.json()).filter((a) => a.polygons?.length)
+    } catch (err) {
+      failures++
+      lastError = errorText(err)
+    }
+  }
+  const nearMi = Number(process.env.SMG_WEATHER_NEARBY_MI) || 50
+
   for (const [point, group] of byPoint) {
     try {
-      const res = await fetchImpl(`${NWS}/alerts/active?point=${point}`, {
-        headers: { 'User-Agent': userAgent(), Accept: 'application/geo+json' },
-        signal: AbortSignal.timeout(15_000),
-      })
+      const res = await fetchImpl(`${NWS}/alerts/active?point=${point}`, { headers, signal: AbortSignal.timeout(15_000) })
       if (!res.ok) throw new Error(`HTTP ${res.status} for point ${point}`)
       const items = parseNws(await res.json())
-      for (const s of group) syncSiteAlerts(db, 'nws', s, items)
+      const here = new Set(items.map((a) => a.id))
+      for (const s of group) {
+        const nearby = regional.flatMap((a) => {
+          if (here.has(a.id)) return []
+          const d = milesToArea(s, a.polygons!)
+          return d > 0 && d <= nearMi ? [{ ...a, distanceMi: d, ...centreOf(a.polygons!) }] : []
+        })
+        syncSiteAlerts(db, 'nws', s, [...items, ...nearby])
+      }
     } catch (err) {
       // Keep the last known alerts for these sites rather than clearing them on a failed request.
       failures++
@@ -322,14 +384,40 @@ function age(iso: string | null, now: Date) {
   return `${Math.floor(mins / 1440)}d ago`
 }
 
-/** Builds the dashboard feed from a client's live alert rows. */
+/** Police calls within this distance count as at the site; further ones (up to the max) as nearby. */
+export const crimeRadius = () => Number(process.env.SMG_CRIME_RADIUS_MI) || 1
+export const maxCrimeRadius = () => Math.max(crimeRadius(), Number(process.env.SMG_CRIME_MAX_RADIUS_MI) || 10)
+const NEARBY_COUNT = () => Number(process.env.SMG_NEARBY_COUNT) || 5
+
+/** Whether an alert row is at the site itself (vs. nearby context). */
+function atSite(r: AlertRow) {
+  if (r.distance_mi == null) return true // area alerts that cover the site, national advisories
+  if (r.source === 'opd') return r.distance_mi <= crimeRadius()
+  return r.distance_mi === 0
+}
+
+/**
+ * Builds the dashboard feed from a client's live alert rows. Each site shows what's at the
+ * site; a site with nothing there shows the nearest few alerts further out, marked nearby.
+ * Threat levels, the banner and map rings only count what's at the site.
+ */
 export function liveFeed(sites: Site[], rows: AlertRow[], now = new Date()): Feed {
-  const bySite = new Map<string, AlertRow[]>()
-  const byAlert = new Map<string, AlertRow[]>()
-  for (const r of rows) {
-    bySite.set(r.site_id, [...(bySite.get(r.site_id) ?? []), r])
-    byAlert.set(r.alert_id, [...(byAlert.get(r.alert_id) ?? []), r])
+  const shown: (AlertRow & { nearby: boolean })[] = []
+  for (const s of sites) {
+    const mine = rows.filter((r) => r.site_id === s.id)
+    const here = mine.filter(atSite)
+    if (here.length) shown.push(...here.map((r) => ({ ...r, nearby: false })))
+    else
+      shown.push(
+        ...mine
+          .sort((x, y) => (x.distance_mi ?? 0) - (y.distance_mi ?? 0))
+          .slice(0, NEARBY_COUNT())
+          .map((r) => ({ ...r, nearby: true })),
+      )
   }
+
+  const byAlert = new Map<string, typeof shown>()
+  for (const r of shown) byAlert.set(r.alert_id, [...(byAlert.get(r.alert_id) ?? []), r])
 
   const alerts: Alert[] = []
   for (const [alertId, hits] of byAlert) {
@@ -343,30 +431,46 @@ export function liveFeed(sites: Site[], rows: AlertRow[], now = new Date()): Fee
       lat: r.lat,
       lng: r.lng,
     }
-    // One entry when it covers every site; otherwise one per affected site.
-    if (sites.length > 1 && hits.length === sites.length) alerts.push({ ...base, id: alertId, siteId: null })
+    // One entry when it's at every site; otherwise one per site.
+    if (sites.length > 1 && hits.length === sites.length && hits.every((h) => !h.nearby))
+      alerts.push({ ...base, id: alertId, siteId: null })
     else
       for (const h of hits)
-        alerts.push({ ...base, id: `${alertId}@${h.site_id}`, siteId: h.site_id, distanceMi: h.distance_mi != null ? Math.round(h.distance_mi * 10) / 10 : undefined })
+        alerts.push({
+          ...base,
+          id: `${alertId}@${h.site_id}`,
+          siteId: h.site_id,
+          nearby: h.nearby || undefined,
+          distanceMi: h.distance_mi != null ? Math.round(h.distance_mi * 10) / 10 : undefined,
+        })
   }
-  alerts.sort((a, b) => RANK[b.severity] - RANK[a.severity] || a.title.localeCompare(b.title))
+  // At-site alerts first (worst first), then nearby ones, closest first.
+  alerts.sort(
+    (a, b) =>
+      Number(!!a.nearby) - Number(!!b.nearby) ||
+      (a.nearby ? (a.distanceMi ?? 0) - (b.distanceMi ?? 0) : RANK[b.severity] - RANK[a.severity]) ||
+      a.title.localeCompare(b.title),
+  )
 
   const summaries: Record<string, SiteSummary> = {}
   const summarize = (list: Alert[]): SiteSummary => {
-    const worst = list.reduce<Severity>((w, a) => (RANK[a.severity] > RANK[w] ? a.severity : w), 'LOW')
+    const counted = list.filter((a) => !a.nearby)
+    const worst = counted.reduce<Severity>((w, a) => (RANK[a.severity] > RANK[w] ? a.severity : w), 'LOW')
     return {
-      threatLevel: list.length ? THREAT[worst] : 'LOW',
-      activeAlertId: list.find((a) => a.severity === 'HIGH')?.id ?? null,
+      threatLevel: counted.length ? THREAT[worst] : 'LOW',
+      activeAlertId: counted.find((a) => a.severity === 'HIGH')?.id ?? null,
     }
   }
   for (const s of sites) summaries[s.id] = summarize(alerts.filter((a) => a.siteId === null || a.siteId === s.id))
   summaries[ALL_SITES] = summarize(alerts)
 
   const incidents: MapIncident[] = []
-  for (const [siteId, hits] of bySite) {
+  for (const s of sites) {
+    const hits = shown.filter((h) => h.site_id === s.id && !h.nearby)
+    if (!hits.length) continue
     const worst = hits.reduce((w, h) => (RANK[h.severity] > RANK[w.severity] ? h : w))
     if (worst.severity !== 'LOW') {
-      incidents.push({ id: `${worst.alert_id}@${siteId}`, severity: worst.severity, siteId, label: worst.event })
+      incidents.push({ id: `${worst.alert_id}@${s.id}`, severity: worst.severity, siteId: s.id, label: worst.event })
     }
   }
 

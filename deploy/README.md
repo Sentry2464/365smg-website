@@ -192,6 +192,14 @@ each client only the alerts at or near their own sites (sites need coordinates).
 | FBI Wanted | on unless `SMG_FEED_FBI=0` | Checked every 3 hours. A list card for `SMG_FBI_FIELD_OFFICES` (default `tampa`; comma-separated api.fbi.gov slugs). No map pins: the FBI gives no locations. |
 | Orlando PD dispatched calls | `SMG_FEED_OPD=1` | Crime-related calls within `SMG_CRIME_RADIUS_MI` (default 1) of a site, kept 12 hours. Block addresses are placed with the US Census geocoder. Turn on only with the City's OK to show them to clients. |
 
+**Nearby.** When nothing is active at a site, its dashboard shows the nearest few items
+further out (`SMG_NEARBY_COUNT`, default 5), marked "nearby" with their distance, so
+clients still see what's happening around them. Nearby items never raise the threat level
+or the banner. Ranges: weather warnings up to `SMG_WEATHER_NEARBY_MI` (default 50) from
+the site, police calls up to `SMG_CRIME_MAX_RADIUS_MI` (default 10; "at the site" is
+`SMG_CRIME_RADIUS_MI`, default 1), registry up to `SMG_REGISTRY_MAX_RADIUS_MI` (default 5;
+main radius `SMG_REGISTRY_RADIUS_MI`, default 1).
+
 `SMG_API_CONTACT` is the contact sent to these services, as they ask. Feed health:
 `sudo -u smg sqlite3 /var/lib/smg/portal.db "select * from feed_status"`. After changing
 settings, `sudo systemctl restart smg-portal`.

@@ -1,11 +1,12 @@
 import type { Database } from 'better-sqlite3'
 import type { Severity } from '@/components/portal/data'
-import { errorText, type FeedAlert, setStatus, syncSiteAlerts, userAgent } from './alerts'
+import { errorText, type FeedAlert, maxCrimeRadius, setStatus, syncSiteAlerts, userAgent } from './alerts'
 
 // Orlando Police Department dispatched calls (active-calls XML, roughly the last hour).
 // Calls carry a block address or intersection but no coordinates, so block addresses are
 // geocoded with the US Census geocoder (public domain) and cached. Only crime-related
-// calls are kept, and each is linked to client sites within SMG_CRIME_RADIUS_MI.
+// calls are kept, and each is linked to client sites within SMG_CRIME_MAX_RADIUS_MI (the
+// dashboard treats those within SMG_CRIME_RADIUS_MI as at the site, the rest as nearby).
 
 export const OPD_FEED = 'https://www1.cityoforlando.net/opd/activecalls/activecadpolice.xml'
 const CENSUS = 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress'
@@ -109,7 +110,7 @@ async function geocode(db: Database, query: string, fetchImpl: typeof fetch, bud
 
 /** Fetches the active calls and links crime-related ones to nearby client sites. */
 export async function pollOpd(db: Database, fetchImpl: typeof fetch = fetch) {
-  const radius = Number(process.env.SMG_CRIME_RADIUS_MI) || 1
+  const radius = maxCrimeRadius()
   try {
     const res = await fetchImpl(OPD_FEED, {
       headers: { 'User-Agent': userAgent() },

@@ -95,11 +95,18 @@ describe('FDLE registry', () => {
       ['FIRST GONE', 'Offender', 'Absconded', 'Temporary'], // closest first
       ['FIRST NEAR', 'Predator', 'Released - Subject to Registration', 'Permanent'],
     ])
+    expect(view.expanded).toBe(false)
     expect(registryNear(db, other.id)).toBeNull() // not opted in
 
     // Next file no longer lists #1: gone. Turning the client off drops the county entirely.
     await pollRegistry(db, fakeFetch([HEADER, person('4', 'GONE', 'Absconded', 'Offender', '7 TEMP ST', true)].join('\n')).impl)
     expect(registryNear(db, c.id)!.people.map((p) => p.id)).toEqual(['4'])
+
+    // Nobody within 1 mi: the nearest within 5 mi are shown, marked as expanded.
+    await pollRegistry(db, fakeFetch([HEADER, person('2', 'FAR', 'Released - Subject to Registration', 'Offender', '900 FAR RD')].join('\n')).impl)
+    const wider = registryNear(db, c.id)!
+    expect(wider).toMatchObject({ expanded: true, maxRadiusMi: 5 })
+    expect(wider.people.map((p) => p.id)).toEqual(['2'])
     setRegistryEnabled(db, admin, c.id, false)
     await pollRegistry(db, fakeFetch(csv).impl)
     expect((db.prepare('SELECT COUNT(*) AS n FROM registrants').get() as { n: number }).n).toBe(0)

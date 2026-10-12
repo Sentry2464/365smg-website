@@ -1,7 +1,7 @@
 import type { Database } from 'better-sqlite3'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ALL_SITES, type Site } from '@/components/portal/data'
-import { clientAlerts, liveFeed, nwsSeverity, parseNws, pollNws, syncSiteAlerts } from '../alerts'
+import { clientAlerts, liveFeed, milesToArea, nwsSeverity, parseNws, pollNws, syncSiteAlerts } from '../alerts'
 import { openDatabase } from '../core.mjs'
 import { createClient, createSite } from '../store'
 
@@ -112,13 +112,14 @@ describe('site alerts', () => {
     }) as unknown as typeof fetch
     expect(await pollNws(db, ok)).toEqual({ points: 2, failures: 0 })
     expect(asked.sort()).toEqual([
+      'https://api.weather.gov/alerts/active?area=FL',
       'https://api.weather.gov/alerts/active?point=28.5000,-81.4000',
       'https://api.weather.gov/alerts/active?point=29.1900,-82.1400',
     ])
     expect(clientAlerts(db, a.id)).toHaveLength(2)
 
     const down = (async () => new Response('busy', { status: 503 })) as unknown as typeof fetch
-    expect(await pollNws(db, down)).toEqual({ points: 2, failures: 2 })
+    expect(await pollNws(db, down)).toEqual({ points: 2, failures: 3 }) // area + 2 points
     expect(clientAlerts(db, a.id).map((r) => r.site_id)).toContain(a1.id)
   })
 
@@ -145,5 +146,42 @@ describe('site alerts', () => {
         [a2.id, 'MED'],
       ]),
     )
+  })
+})
+
+describe('nearby tier', () => {
+  // A square warning area roughly 10-17 miles north of Orlando.
+  const square = [[[-81.5, 28.7], [-81.3, 28.7], [-81.3, 28.8], [-81.5, 28.8], [-81.5, 28.7]]]
+
+  it('measures distance to an alert area', () => {
+    expect(milesToArea({ lat: 28.75, lng: -81.4 }, square)).toBe(0)
+    expect(milesToArea({ lat: 28.54, lng: -81.4 }, square)).toBeCloseTo(11, 0)
+  })
+
+  it('shows regional weather as nearby when nothing covers the site, without raising the threat', async () => {
+    const c = createClient(db, admin, { name: 'Acme', industry: 'HOA', industryPlural: '', managerEmail: '' })
+    const site = createSite(db, admin, c.id, { name: 'Acme', city: 'Orlando, FL', timeZone: '', lat: '28.54', lng: '-81.4' })
+    const regional = nwsResponse({ id: 'urn:lake', event: 'Flood Warning', severity: 'Severe' })
+    ;(regional.features[0] as { geometry: unknown }).geometry = { type: 'Polygon', coordinates: square }
+    const serve = (async (url: string) =>
+      Response.json(url.includes('area=FL') ? regional : nwsResponse())) as unknown as typeof fetch
+    await pollNws(db, serve)
+
+    const feed = liveFeed([toSite(site)], clientAlerts(db, c.id))
+    expect(feed.alerts).toHaveLength(1)
+    expect(feed.alerts[0]).toMatchObject({ nearby: true, severity: 'HIGH' })
+    expect(feed.alerts[0].distanceMi).toBeCloseTo(11, 0)
+    expect(feed.summaries[site.id]).toEqual({ threatLevel: 'LOW', activeAlertId: null })
+    expect(feed.incidents).toEqual([])
+  })
+
+  it('hides nearby items once something is at the site', () => {
+    const c = createClient(db, admin, { name: 'Acme', industry: 'HOA', industryPlural: '', managerEmail: '' })
+    const site = createSite(db, admin, c.id, { name: 'Acme', city: 'Orlando, FL', timeZone: '', lat: '28.54', lng: '-81.4' })
+    const [here] = parseNws(nwsResponse({ id: 'urn:here', event: 'Heat Advisory', severity: 'Minor' }))
+    const [far] = parseNws(nwsResponse({ id: 'urn:far', event: 'Flood Warning', severity: 'Severe' }))
+    syncSiteAlerts(db, 'nws', site, [here, { ...far, distanceMi: 12 }])
+    const feed = liveFeed([toSite(site)], clientAlerts(db, c.id))
+    expect(feed.alerts.map((a) => [a.title.split(' ')[0], !!a.nearby])).toEqual([['Heat', false]])
   })
 })

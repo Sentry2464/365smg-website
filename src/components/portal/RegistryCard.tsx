@@ -15,8 +15,10 @@ export function RegistryCard({ view }: { view: RegistryView | null }) {
           Registered sexual offenders and predators near your sites
         </h2>
         <span className="cp-card__sub">
-          From the Florida Department of Law Enforcement (FDLE) public registry, within {view.radiusMi} mile
-          {view.radiusMi === 1 ? '' : 's'} of your sites.{' '}
+          From the Florida Department of Law Enforcement (FDLE) public registry,{' '}
+          {view.expanded
+            ? `none within ${view.radiusMi} mi of your sites; the nearest within ${view.maxRadiusMi} mi are shown.`
+            : `within ${view.radiusMi} mi of your sites.`}{' '}
           {view.asOf ? `As of ${fmt(view.asOf)}.` : 'The registry file has not been downloaded yet.'}
         </span>
       </div>
@@ -36,7 +38,7 @@ export function RegistryCard({ view }: { view: RegistryView | null }) {
       </div>
       {view.asOf && view.people.length === 0 ? (
         <div className="cp-empty">
-          <span>No registrants listed within this distance of your sites.</span>
+          <span>No registrants listed within {view.maxRadiusMi} mi of your sites.</span>
         </div>
       ) : (
         <ul className="cp-registry__list">

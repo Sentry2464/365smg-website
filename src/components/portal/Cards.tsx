@@ -57,19 +57,24 @@ export function AlertsCard({ alerts }: { alerts: Alert[] }) {
           <span>No active alerts for your sites right now.</span>
         </div>
       ) : (
-        <ul className="cp-alerts">
-          {alerts.map((a) => (
-            <li key={a.id}>
-              <a className="cp-alert" href={a.url} target="_blank" rel="noopener noreferrer">
-                <span className={`cp-sev cp-sev--${a.severity}`}>{a.severity}</span>
-                <span className="cp-alert__body">
-                  <span className="cp-alert__title">{a.title}</span>
-                  <span className="cp-meta">{alertMeta(a, sites)}</span>
-                </span>
-              </a>
-            </li>
-          ))}
-        </ul>
+        <>
+          {alerts.every((a) => a.nearby) && (
+            <p className="cp-meta cp-alerts__nearby">Nothing at your sites right now. Nearest activity:</p>
+          )}
+          <ul className="cp-alerts">
+            {alerts.map((a) => (
+              <li key={a.id}>
+                <a className="cp-alert" href={a.url} target="_blank" rel="noopener noreferrer">
+                  <span className={`cp-sev cp-sev--${a.severity}`}>{a.severity}</span>
+                  <span className="cp-alert__body">
+                    <span className="cp-alert__title">{a.title}</span>
+                    <span className="cp-meta">{alertMeta(a, sites)}</span>
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
       <a className="cp-more" href="#">
         All alerts →

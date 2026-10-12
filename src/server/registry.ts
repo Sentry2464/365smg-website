@@ -235,6 +235,9 @@ export interface NearbyRegistrant {
 export interface RegistryView {
   asOf: string | null
   radiusMi: number
+  /** True when nobody is within radiusMi and the nearest people out to maxRadiusMi are shown. */
+  expanded: boolean
+  maxRadiusMi: number
   people: NearbyRegistrant[]
 }
 
@@ -245,11 +248,12 @@ export function registryNear(db: Database, clientId: string): RegistryView | nul
     | undefined
   if (!client?.registry_enabled) return null
   const radiusMi = Number(process.env.SMG_REGISTRY_RADIUS_MI) || 1
+  const maxRadiusMi = Math.max(radiusMi, Number(process.env.SMG_REGISTRY_MAX_RADIUS_MI) || 5)
   const sites = db
     .prepare(`SELECT name, lat, lng FROM sites WHERE client_id = ? AND lat IS NOT NULL AND lng IS NOT NULL`)
     .all(clientId) as { name: string; lat: number; lng: number }[]
   const near = new Map<string, NearbyRegistrant>()
-  const box = radiusMi / 69 + 0.01
+  const box = maxRadiusMi / 69 + 0.01
   const candidates = db.prepare(
     `SELECT person_nbr, json, address, address_type, lat, lng FROM registrants
      WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?`,
@@ -266,7 +270,7 @@ export function registryNear(db: Database, clientId: string): RegistryView | nul
     }[]
     for (const row of rows) {
       const d = miles(s, row)
-      if (d > radiusMi) continue
+      if (d > maxRadiusMi) continue
       const r = JSON.parse(row.json) as Record<string, string>
       if (EXCLUDED_STATUS.test(r.STATUS ?? '')) continue
       const prev = near.get(row.person_nbr)
@@ -284,5 +288,10 @@ export function registryNear(db: Database, clientId: string): RegistryView | nul
     }
   }
   const asOf = (db.prepare(`SELECT MIN(as_of) AS a FROM registry_imports`).get() as { a: string | null }).a
-  return { asOf, radiusMi, people: [...near.values()].sort((a, b) => a.distanceMi - b.distanceMi) }
+  const all = [...near.values()].sort((a, b) => a.distanceMi - b.distanceMi)
+  const close = all.filter((p) => p.distanceMi <= radiusMi)
+  const nearestCount = Number(process.env.SMG_NEARBY_COUNT) || 5
+  return close.length || all.length === 0
+    ? { asOf, radiusMi, maxRadiusMi, expanded: false, people: close }
+    : { asOf, radiusMi, maxRadiusMi, expanded: true, people: all.slice(0, nearestCount) }
 }

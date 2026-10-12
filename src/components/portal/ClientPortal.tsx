@@ -18,6 +18,8 @@ import { FeedbackSection, InvestigationsSection } from './Forms'
 import { PortalHeader, SiteSelect } from './Header'
 import { GlobeMap } from './GlobeMap'
 import { IntelMap } from './IntelMap'
+import { WantedCard } from './WantedCard'
+import type { WantedList } from '@/server/publicsafety'
 import { Ticker } from './Ticker'
 
 /** Design-review switches, set from the URL (see src/app/portal/page.tsx). */
@@ -53,9 +55,11 @@ export interface ClientPortalProps {
   preview?: PortalPreview
   /** God's Eye View base URL; the placeholder map is shown when it's not set. */
   globeUrl?: string
+  /** FBI Wanted lists for the portal's field office(s). */
+  wanted?: WantedList[]
 }
 
-export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {}, globeUrl }: ClientPortalProps) {
+export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {}, globeUrl, wanted = [] }: ClientPortalProps) {
   // Last site this browser picked; ignored if it isn't one of this client's sites.
   const readSavedSite = useCallback((): SiteId | null => {
     try {
@@ -162,6 +166,8 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
             <BriefingsCard />
           </div>
 
+          <WantedCard lists={wanted} />
+
           <InvestigationsSection forceSent={preview.formsSent} />
           <FeedbackSection siteId={siteId} forceSent={preview.formsSent} />
         </main>
@@ -172,7 +178,7 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
               24/7 operations line: <b>{contact.phone}</b> · {contact.email}
             </span>
             <span className="cp-footer__right">
-              <span>Data: NWS, CISA, OSIRIS layers</span>
+              <span>Data: NWS, DHS, FBI, God&apos;s Eye layers</span>
               <a href="#">Privacy</a>
               <a href="#">Terms</a>
             </span>

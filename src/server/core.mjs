@@ -162,6 +162,14 @@ const MIGRATIONS = [
     at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
   );
   `,
+  `
+  -- Latest copy of list feeds shown as-is (e.g. FBI Wanted), replaced on each fetch.
+  CREATE TABLE feed_cache (
+    key        TEXT PRIMARY KEY,
+    json       TEXT NOT NULL,
+    fetched_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  );
+  `,
 ]
 
 export function migrate(db) {

@@ -186,6 +186,8 @@ each client only the alerts at or near their own sites (sites need coordinates).
 | Feed | Setting in `/etc/smg-portal.env` | Notes |
 | --- | --- | --- |
 | National Weather Service watches and warnings | on unless `SMG_FEED_NWS=0` | Public domain. Matched to each site's location. |
+| DHS National Terrorism Advisory System | on unless `SMG_FEED_NTAS=0` | Checked every 30 minutes. An active advisory shows to every client. |
+| FBI Wanted | on unless `SMG_FEED_FBI=0` | Checked every 3 hours. A list card for `SMG_FBI_FIELD_OFFICES` (default `tampa`; comma-separated api.fbi.gov slugs). No map pins: the FBI gives no locations. |
 | Orlando PD dispatched calls | `SMG_FEED_OPD=1` | Crime-related calls within `SMG_CRIME_RADIUS_MI` (default 1) of a site, kept 12 hours. Block addresses are placed with the US Census geocoder. Turn on only with the City's OK to show them to clients. |
 
 `SMG_API_CONTACT` is the contact sent to these services, as they ask. Feed health:

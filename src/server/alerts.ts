@@ -194,14 +194,38 @@ export async function pollNws(db: Database, fetchImpl: typeof fetch = fetch) {
   return { points: byPoint.size, failures }
 }
 
-/** Feeds polled on each run. Orlando PD is opt-in (SMG_FEED_OPD=1) until the City OKs reuse. */
-const POLLERS: [string, { enabled: () => boolean; run: (db: Database) => Promise<unknown> }][] = [
-  ['NWS', { enabled: () => process.env.SMG_FEED_NWS !== '0', run: (db) => pollNws(db) }],
+interface Poller {
+  enabled: () => boolean
+  /** Run on every n-th 5-minute tick (1 = every 5 minutes). */
+  every: number
+  run: (db: Database) => Promise<unknown>
+}
+
+/** Feeds and how often they're polled. Orlando PD is opt-in (SMG_FEED_OPD=1) until the City OKs reuse. */
+const POLLERS: [string, Poller][] = [
+  ['NWS', { enabled: () => process.env.SMG_FEED_NWS !== '0', every: 1, run: (db) => pollNws(db) }],
   [
     'Orlando PD',
     {
       enabled: () => process.env.SMG_FEED_OPD === '1',
+      every: 1,
       run: async (db) => (await import('./opd')).pollOpd(db),
+    },
+  ],
+  [
+    'DHS NTAS',
+    {
+      enabled: () => process.env.SMG_FEED_NTAS !== '0',
+      every: 6, // 30 minutes
+      run: async (db) => (await import('./publicsafety')).pollNtas(db),
+    },
+  ],
+  [
+    'FBI Wanted',
+    {
+      enabled: () => process.env.SMG_FEED_FBI !== '0',
+      every: 36, // 3 hours
+      run: async (db) => (await import('./publicsafety')).pollWanted(db),
     },
   ],
 ]
@@ -210,10 +234,12 @@ const POLLERS: [string, { enabled: () => boolean; run: (db: Database) => Promise
 export function startAlertPolling(open: () => Database) {
   const g = globalThis as unknown as { smgAlertPoller?: ReturnType<typeof setInterval> }
   if (g.smgAlertPoller) return
+  let tick = 0
   const run = async () => {
     const db = open()
+    const n = tick++
     for (const [name, poll] of POLLERS) {
-      if (!poll.enabled()) continue
+      if (!poll.enabled() || n % poll.every !== 0) continue
       await poll.run(db).catch((err) => console.error(`[alerts] ${name} poll failed:`, err instanceof Error ? err.message : err))
     }
   }
@@ -238,7 +264,7 @@ export function clientAlerts(db: Database, clientId: string, now = new Date()) {
 
 const RANK: Record<Severity, number> = { HIGH: 3, MED: 2, LOW: 1 }
 const THREAT: Record<Severity, ThreatLevel> = { HIGH: 'HIGH', MED: 'ELEVATED', LOW: 'LOW' }
-const SOURCE_LABEL: Record<string, string> = { nws: 'NWS', opd: 'Orlando PD' }
+const SOURCE_LABEL: Record<string, string> = { nws: 'NWS', opd: 'Orlando PD', ntas: 'DHS' }
 
 function age(iso: string | null, now: Date) {
   if (!iso) return ''

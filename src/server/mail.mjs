@@ -106,7 +106,12 @@ export async function deliver(to, subject, text, fetchImpl = fetch) {
   const provider = mailProvider()
   if (provider === 'graph') await sendGraph(to, subject, text, fetchImpl)
   else if (provider === 'smtp') await sendSmtp(to, subject, text)
-  else console.info(`[mail] to=${to} subject=${JSON.stringify(subject)}\n${text}`)
+  else {
+    console.info(`[mail] to=${to} subject=${JSON.stringify(subject)}\n${text}`)
+    return provider
+  }
+  // Recipient and subject only (subjects never carry confidential details), for tracing deliveries.
+  console.info(`[mail] sent via ${provider} to=${to} subject=${JSON.stringify(subject)}`)
   return provider
 }
 

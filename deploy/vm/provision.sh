@@ -124,6 +124,8 @@ SMG_API_CONTACT=admin@365securitymg.com
 SMG_FEED_OPD=0
 SMG_CRIME_RADIUS_MI=1
 
+# Public address used for links in emails.
+SMG_PUBLIC_URL=https://portal.365smg.com
 # Investigations alerts go only here (case reference only, never the details).
 NOTIFY_INVESTIGATIONS_TO=
 # Feedback goes to each client's account manager; this catches clients without one.

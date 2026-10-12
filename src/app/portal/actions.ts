@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation'
 import { endSession } from '@/server/auth'
 import { db } from '@/server/db'
-import { sendMail } from '@/server/notify'
+import { portalUrl, sendMail } from '@/server/notify'
 import { clearSessionCookie, readToken, requestMeta, requireUser } from '@/server/session'
 import { clientScope, ValidationError } from '@/server/store'
 
@@ -34,6 +34,8 @@ export async function submitFeedback(input: {
         '',
         row.call_back ? 'They asked for a call back.' : 'No call back requested.',
         `Reply by: ${row.reply_by}`,
+        '',
+        `All feedback: ${portalUrl('/portal/admin/feedback')}`,
       ].join('\n'),
     )
     const replyBy = new Date(`${row.reply_by}T12:00:00`).toLocaleDateString('en-US', {
@@ -63,8 +65,13 @@ export async function submitInvestigation(input: {
     // Confidential: the email carries the case reference only, never the details.
     await sendMail(
       process.env.NOTIFY_INVESTIGATIONS_TO,
-      `New confidential request ${row.case_ref}${row.timeline === 'urgent' ? ' (time-sensitive)' : ''}`,
-      `A client submitted a new investigation request, ${row.case_ref}.\nSign in to the portal to read it: /portal/admin/investigations`,
+      `Investigation request ${row.case_ref}${row.timeline === 'urgent' ? ' [urgent]' : ''}`,
+      [
+        `A client has submitted investigation request ${row.case_ref}${row.timeline === 'urgent' ? ', marked urgent' : ''}.`,
+        '',
+        'For confidentiality, the details are only in the portal. Sign in to read and assign it:',
+        portalUrl('/portal/admin/investigations'),
+      ].join('\n'),
     )
     return { ok: true, caseRef: row.case_ref }
   } catch (err) {

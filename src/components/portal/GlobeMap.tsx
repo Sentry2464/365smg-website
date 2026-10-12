@@ -37,6 +37,9 @@ export function GlobeMap({ siteId, url }: { siteId: SiteId; url: string }) {
   const { sites } = usePortal()
   const frame = useRef<HTMLIFrameElement>(null)
   const seq = useRef(0)
+  const lastSent = useRef('')
+  const lastAcked = useRef('')
+  const retry = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [ready, setReady] = useState(false)
   const [failed, setFailed] = useState(false)
   const [layers, setLayers] = useState<Record<Layer, boolean>>({
@@ -57,20 +60,34 @@ export function GlobeMap({ siteId, url }: { siteId: SiteId; url: string }) {
       layers: (Object.keys(LAYERS) as Layer[]).filter((l) => layers[l]).flatMap((l) => LAYERS[l]),
       annotations: located.slice(0, MAX_PINS).map((s) => ({
         type: 'pin',
-        lat: s.lat,
-        lon: s.lng,
+        latitude: s.lat,
+        longitude: s.lng,
         label: s.name.slice(0, 120),
         color: s.id === siteId ? 'amber' : 'primary',
       })),
     }
-    win.postMessage({ type: 'gev:view', id: `smg-${++seq.current}`, view }, origin)
+    const id = `smg-${++seq.current}`
+    const post = () => win.postMessage({ type: 'gev:view', id, view }, origin)
+    lastSent.current = id
+    post()
+    // Each view replaces the last one; resend once if the globe doesn't acknowledge it.
+    clearTimeout(retry.current)
+    retry.current = setTimeout(() => {
+      if (lastAcked.current !== id && lastSent.current === id) post()
+    }, 10_000)
   }, [sites, siteId, layers, origin])
+
+  useEffect(() => () => clearTimeout(retry.current), [])
 
   // Listen only to the framed globe, from its own origin.
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== origin || e.source !== frame.current?.contentWindow) return
       if (e.data?.type === 'gev:ready') setReady(true)
+      if (e.data?.type === 'gev:view-applied') {
+        lastAcked.current = String(e.data.id)
+        setReady(true)
+      }
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
@@ -120,6 +137,9 @@ export function GlobeMap({ siteId, url }: { siteId: SiteId; url: string }) {
             allow="fullscreen"
             referrerPolicy="strict-origin"
             sandbox="allow-scripts allow-same-origin allow-popups"
+            // gev:ready is sent once; if this component remounts after it, the globe's
+            // listener is already up, so send the view shortly after load as well.
+            onLoad={() => setTimeout(send, 1500)}
           />
           {!ready && (
             <p className="cp-globe__status" role="status">

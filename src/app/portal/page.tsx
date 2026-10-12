@@ -4,6 +4,7 @@ import { placeSites, sampleFeed, type Site, type ThreatLevel } from '@/component
 import { clientAlerts, liveFeed } from '@/server/alerts'
 import { db } from '@/server/db'
 import { missingList } from '@/server/fdle'
+import { globeUrlFor } from '@/server/globe'
 import { wantedList } from '@/server/publicsafety'
 import { stormList } from '@/server/storms'
 import { registryNear } from '@/server/registry'
@@ -15,18 +16,6 @@ const THREATS: ThreatLevel[] = ['LOW', 'ELEVATED', 'HIGH']
 // Sample site alerts in development (unless SMG_DEMO=0) or with SMG_DEMO=1; live alerts otherwise.
 const DEMO =
   process.env.SMG_DEMO === '1' || (process.env.NODE_ENV !== 'production' && process.env.SMG_DEMO !== '0')
-
-/** God's Eye View base URL (e.g. https://globe.365securitymg.com). Unset: the placeholder map. */
-function globeUrl() {
-  const raw = process.env.SMG_GLOBE_URL
-  if (!raw) return undefined
-  try {
-    const u = new URL(raw)
-    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : undefined
-  } catch {
-    return undefined
-  }
-}
 
 // Design-review states, e.g. /portal?state=no-alert,empty-alerts,sent&threat=HIGH
 export default async function PortalPage({
@@ -93,7 +82,7 @@ export default async function PortalPage({
         timeZone: sites[0]?.timeZone ?? 'America/New_York',
       })}
       preview={preview}
-      globeUrl={globeUrl()}
+      globeUrl={globeUrlFor(client.id)}
       storms={stormList(db())}
       localCameras={process.env.SMG_GLOBE_LOCAL_CAMERAS === '1'}
       wanted={wantedList(db())}

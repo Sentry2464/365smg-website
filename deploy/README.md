@@ -223,7 +223,8 @@ the site, police calls up to `SMG_CRIME_MAX_RADIUS_MI` (default 10; "at the site
 main radius `SMG_REGISTRY_RADIUS_MI`, default 1).
 
 **Intel map.** `SMG_GLOBE_URL` frames God's Eye View in the dashboard (unset: the static
-map). Its *Cameras* pill turns on God's Eye's public camera layer; until God's Eye has
+map). A public globe also needs `SMG_GLOBE_SECRET`, shared with its login gate; see
+`deploy/globe/README.md`. Its *Cameras* pill turns on God's Eye's public camera layer; until God's Eye has
 cameras near the client sites it also says "No public cameras in this area yet". Set
 `SMG_GLOBE_LOCAL_CAMERAS=1` once a Florida camera pack is loaded there.
 

@@ -126,6 +126,11 @@ SMG_CRIME_RADIUS_MI=1
 # 1: new clients get the sexual offender registry card (smg-admin registry for existing ones).
 SMG_REGISTRY_DEFAULT=0
 
+# God's Eye View in the dashboard (deploy/globe/README.md). Leave both empty for the static map.
+# SMG_GLOBE_SECRET: same value as GATE_SECRET on VM 151; type it in here, don't paste it into chat.
+SMG_GLOBE_URL=
+SMG_GLOBE_SECRET=
+
 # Public address used for links in emails.
 SMG_PUBLIC_URL=https://portal.365securitymg.com
 # Investigations alerts go only here (case reference only, never the details).

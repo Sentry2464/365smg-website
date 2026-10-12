@@ -9,6 +9,7 @@ import {
   createUser,
   resetMfa,
   resetPassword,
+  setRegistryEnabled,
   setUserDisabled,
   ValidationError,
 } from '@/server/store'
@@ -98,5 +99,20 @@ export async function toggleUser(_: AdminState, form: FormData): Promise<AdminSt
     const disable = field(form, 'disable') === '1'
     setUserDisabled(db(), actor, String(field(form, 'userId')), disable)
     return { message: disable ? 'Account disabled and signed out.' : 'Account enabled.' }
+  })
+}
+
+export async function toggleRegistry(_: AdminState, form: FormData): Promise<AdminState> {
+  const actor = await adminActor()
+  return run(() => {
+    const on = field(form, 'enable') === '1'
+    setRegistryEnabled(db(), actor, String(field(form, 'clientId')), on)
+    // Fetch the client's county files now rather than at the next 6-hourly run.
+    if (on) void import('@/server/registry').then((m) => m.pollRegistry(db())).catch(() => {})
+    return {
+      message: on
+        ? 'Registry card turned on. FDLE’s county file is downloading and appears on the client’s dashboard within a few minutes.'
+        : 'Registry card turned off for this client.',
+    }
   })
 }

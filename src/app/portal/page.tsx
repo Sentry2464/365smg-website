@@ -5,7 +5,9 @@ import { clientAlerts, liveFeed } from '@/server/alerts'
 import { db } from '@/server/db'
 import { missingList } from '@/server/fdle'
 import { wantedList } from '@/server/publicsafety'
-import { requireUser } from '@/server/session'
+import { registryNear } from '@/server/registry'
+import { audit } from '@/server/core.mjs'
+import { requestMeta, requireUser } from '@/server/session'
 import { clientScope } from '@/server/store'
 
 const THREATS: ThreatLevel[] = ['LOW', 'ELEVATED', 'HIGH']
@@ -60,6 +62,18 @@ export default async function PortalPage({
     threat: THREATS.includes(threat) ? threat : undefined,
   }
 
+  // Registry views are logged: who saw how many records, from where.
+  const registry = registryNear(db(), client.id)
+  if (registry) {
+    audit(db(), {
+      actorId: user.id,
+      clientId: client.id,
+      action: 'registry.view',
+      ip: (await requestMeta()).ip,
+      detail: { shown: registry.people.length, asOf: registry.asOf },
+    })
+  }
+
   const names = user.name.trim().split(/\s+/)
   return (
     <ClientPortal
@@ -81,6 +95,7 @@ export default async function PortalPage({
       globeUrl={globeUrl()}
       wanted={wantedList(db())}
       missing={missingList(db())}
+      registry={registry}
     />
   )
 }

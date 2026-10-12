@@ -170,6 +170,29 @@ const MIGRATIONS = [
     fetched_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
   );
   `,
+  `
+  -- FDLE sexual offender/predator registry, per county file. Each import replaces that
+  -- county's rows; the published record is kept unaltered in json.
+  ALTER TABLE clients ADD COLUMN registry_enabled INTEGER NOT NULL DEFAULT 0;
+
+  CREATE TABLE registrants (
+    county       TEXT NOT NULL,             -- the county file it came from
+    person_nbr   TEXT NOT NULL,
+    json         TEXT NOT NULL,             -- the CSV row, verbatim
+    address      TEXT,                      -- as published, for geocoding and display
+    address_type TEXT,                      -- Permanent / Temporary / Transient
+    lat          REAL,
+    lng          REAL,
+    PRIMARY KEY (county, person_nbr)
+  );
+  CREATE INDEX registrants_lat ON registrants(lat);
+
+  CREATE TABLE registry_imports (
+    county     TEXT PRIMARY KEY,
+    as_of      TEXT NOT NULL,
+    rows       INTEGER NOT NULL
+  );
+  `,
 ]
 
 export function migrate(db) {

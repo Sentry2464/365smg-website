@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { db } from '@/server/db'
 import { requireUser } from '@/server/session'
 import { clientScope, getClient, listUsers } from '@/server/store'
-import { addSite, addUser } from '../../actions'
+import { addSite, addUser, toggleRegistry } from '../../actions'
 import { AdminForm } from '../../AdminForm'
 import { AdminShell, fmtDate } from '../../AdminShell'
 import { UserActions } from '../../UserActions'
@@ -83,6 +83,25 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
               <option value="America/Los_Angeles">Pacific</option>
             </select>
           </div>
+        </AdminForm>
+      </section>
+
+      <section className="cp-card">
+        <div className="cp-card__head">
+          <h2 className="cp-card__title">Sex offender registry</h2>
+          <span className="cp-card__sub">
+            {client.registry_enabled
+              ? 'On: this client’s dashboard lists FDLE registrants near their sites, with FDLE’s warnings. Every view is recorded in the audit log.'
+              : 'Off: turn on only if this client has asked for it. Their dashboard will list FDLE registrants near their sites, with FDLE’s warnings, and every view is recorded in the audit log.'}
+          </span>
+        </div>
+        <AdminForm
+          action={toggleRegistry}
+          submitLabel={client.registry_enabled ? 'Turn off' : 'Turn on for this client'}
+          variant={client.registry_enabled ? 'ghost' : 'gold'}
+        >
+          <input type="hidden" name="clientId" value={client.id} />
+          <input type="hidden" name="enable" value={client.registry_enabled ? '0' : '1'} />
         </AdminForm>
       </section>
 

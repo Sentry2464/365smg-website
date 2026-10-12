@@ -19,6 +19,8 @@ import { PortalHeader, SiteSelect } from './Header'
 import { GlobeMap } from './GlobeMap'
 import { IntelMap } from './IntelMap'
 import { MissingCard } from './MissingCard'
+import { RegistryCard } from './RegistryCard'
+import type { RegistryView } from '@/server/registry'
 import { WantedCard } from './WantedCard'
 import type { MissingList } from '@/server/fdle'
 import type { WantedList } from '@/server/publicsafety'
@@ -61,9 +63,11 @@ export interface ClientPortalProps {
   wanted?: WantedList[]
   /** FDLE missing persons alerts for the area. */
   missing?: MissingList | null
+  /** FDLE registry near the sites; only for opted-in clients. */
+  registry?: RegistryView | null
 }
 
-export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {}, globeUrl, wanted = [], missing = null }: ClientPortalProps) {
+export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {}, globeUrl, wanted = [], missing = null, registry = null }: ClientPortalProps) {
   // Last site this browser picked; ignored if it isn't one of this client's sites.
   const readSavedSite = useCallback((): SiteId | null => {
     try {
@@ -172,6 +176,7 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
 
           <MissingCard list={missing} />
           <WantedCard lists={wanted} />
+          <RegistryCard view={registry} />
 
           <InvestigationsSection forceSent={preview.formsSent} />
           <FeedbackSection siteId={siteId} forceSent={preview.formsSent} />

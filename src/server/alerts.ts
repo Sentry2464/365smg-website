@@ -240,6 +240,15 @@ const POLLERS: [string, Poller][] = [
     },
   ],
   [
+    'FDLE registry',
+    {
+      // Only downloads counties of clients an admin has opted in.
+      enabled: () => process.env.SMG_FEED_REGISTRY !== '0',
+      every: 72, // 6 hours; FDLE regenerates the file every 4
+      run: async (db) => (await import('./registry')).pollRegistry(db),
+    },
+  ],
+  [
     'FBI Wanted',
     {
       enabled: () => process.env.SMG_FEED_FBI !== '0',

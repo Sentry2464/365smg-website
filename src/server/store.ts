@@ -29,6 +29,7 @@ export interface ClientRow {
   manager_email: string | null
   created_at: string
   disabled_at: string | null
+  registry_enabled: number
 }
 
 export interface SiteRow {
@@ -341,6 +342,19 @@ export function resetMfa(db: Database, actor: Actor, userId: string) {
   ).run(userId)
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId)
   audit(db, { actorId: actor.id, clientId: user.client_id, action: 'user.reset_mfa', target: userId, ip: actor.ip })
+}
+
+/** Opts a client in or out of seeing the FDLE registry near their sites. */
+export function setRegistryEnabled(db: Database, actor: Actor, clientId: string, enabled: boolean) {
+  if (!getClient(db, clientId)) throw new ValidationError('Client not found.')
+  db.prepare('UPDATE clients SET registry_enabled = ? WHERE id = ?').run(enabled ? 1 : 0, clientId)
+  audit(db, {
+    actorId: actor.id,
+    clientId,
+    action: enabled ? 'client.registry_on' : 'client.registry_off',
+    target: clientId,
+    ip: actor.ip,
+  })
 }
 
 export function setUserDisabled(db: Database, actor: Actor, userId: string, disabled: boolean) {

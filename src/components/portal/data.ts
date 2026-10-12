@@ -16,6 +16,8 @@ export interface Site {
   timeZone: string
   /** Position on the placeholder map, in percent of its width/height. */
   map: { x: number; y: number }
+  lat?: number | null
+  lng?: number | null
 }
 
 export interface Alert {

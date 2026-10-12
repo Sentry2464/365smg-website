@@ -9,6 +9,18 @@ const THREATS: ThreatLevel[] = ['LOW', 'ELEVATED', 'HIGH']
 // Sample site alerts only in development or when explicitly enabled (never on the live VM).
 const DEMO = process.env.NODE_ENV !== 'production' || process.env.SMG_DEMO === '1'
 
+/** God's Eye View base URL (e.g. https://globe.365smg.com). Unset: the placeholder map. */
+function globeUrl() {
+  const raw = process.env.SMG_GLOBE_URL
+  if (!raw) return undefined
+  try {
+    const u = new URL(raw)
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : undefined
+  } catch {
+    return undefined
+  }
+}
+
 // Design-review states, e.g. /portal?state=no-alert,empty-alerts,sent&threat=HIGH
 export default async function PortalPage({
   searchParams,
@@ -30,6 +42,8 @@ export default async function PortalPage({
     city: r.city,
     timeZone: r.time_zone,
     map: positions[i],
+    lat: r.lat,
+    lng: r.lng,
   }))
 
   const params = await searchParams
@@ -60,6 +74,7 @@ export default async function PortalPage({
         timeZone: sites[0]?.timeZone ?? 'America/New_York',
       })}
       preview={preview}
+      globeUrl={globeUrl()}
     />
   )
 }

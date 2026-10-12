@@ -16,6 +16,7 @@ import {
 } from './data'
 import { FeedbackSection, InvestigationsSection } from './Forms'
 import { PortalHeader, SiteSelect } from './Header'
+import { GlobeMap } from './GlobeMap'
 import { IntelMap } from './IntelMap'
 import { Ticker } from './Ticker'
 
@@ -50,9 +51,11 @@ export interface ClientPortalProps {
   feed: Feed
   updatedAt: string
   preview?: PortalPreview
+  /** God's Eye View base URL; the placeholder map is shown when it's not set. */
+  globeUrl?: string
 }
 
-export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {} }: ClientPortalProps) {
+export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {}, globeUrl }: ClientPortalProps) {
   // Last site this browser picked; ignored if it isn't one of this client's sites.
   const readSavedSite = useCallback((): SiteId | null => {
     try {
@@ -139,7 +142,11 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
           </div>
 
           <div className="cp-dash">
-            <IntelMap siteId={siteId} incidents={feed.incidents} demo={feed.demo} />
+            {globeUrl ? (
+              <GlobeMap siteId={siteId} url={globeUrl} />
+            ) : (
+              <IntelMap siteId={siteId} incidents={feed.incidents} demo={feed.demo} />
+            )}
             <WeatherCard site={site ?? sites[0]} />
             <AlertsCard alerts={siteAlerts} />
             <NewsCard />

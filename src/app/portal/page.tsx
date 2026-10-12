@@ -1,13 +1,15 @@
 import { redirect } from 'next/navigation'
 import { ClientPortal, type PortalPreview } from '@/components/portal/ClientPortal'
 import { placeSites, sampleFeed, type Site, type ThreatLevel } from '@/components/portal/data'
+import { clientAlerts, liveFeed } from '@/server/alerts'
 import { db } from '@/server/db'
 import { requireUser } from '@/server/session'
 import { clientScope } from '@/server/store'
 
 const THREATS: ThreatLevel[] = ['LOW', 'ELEVATED', 'HIGH']
-// Sample site alerts only in development or when explicitly enabled (never on the live VM).
-const DEMO = process.env.NODE_ENV !== 'production' || process.env.SMG_DEMO === '1'
+// Sample site alerts in development (unless SMG_DEMO=0) or with SMG_DEMO=1; live alerts otherwise.
+const DEMO =
+  process.env.SMG_DEMO === '1' || (process.env.NODE_ENV !== 'production' && process.env.SMG_DEMO !== '0')
 
 /** God's Eye View base URL (e.g. https://globe.365smg.com). Unset: the placeholder map. */
 function globeUrl() {
@@ -67,7 +69,7 @@ export default async function PortalPage({
       }}
       client={{ name: client.name, industry: client.industry, industryPlural: client.industry_plural }}
       sites={sites}
-      feed={sampleFeed(sites, { demo: DEMO })}
+      feed={DEMO ? sampleFeed(sites, { demo: true }) : liveFeed(sites, clientAlerts(db(), client.id))}
       updatedAt={new Date().toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',

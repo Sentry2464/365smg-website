@@ -116,6 +116,40 @@ const MIGRATIONS = [
   CREATE TRIGGER audit_no_delete BEFORE DELETE ON audit_log
     BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
   `,
+  `
+  -- Live alerts from public feeds (NWS first), and which client sites each one affects.
+  CREATE TABLE alerts (
+    id            TEXT PRIMARY KEY,           -- source:native id
+    source        TEXT NOT NULL,              -- 'nws'
+    event         TEXT NOT NULL,
+    severity      TEXT NOT NULL CHECK (severity IN ('HIGH', 'MED', 'LOW')),
+    headline      TEXT NOT NULL,
+    url           TEXT NOT NULL,
+    area          TEXT,
+    starts_at     TEXT,
+    ends_at       TEXT,
+    first_seen_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    last_seen_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  );
+
+  CREATE TABLE site_alerts (
+    alert_id    TEXT NOT NULL REFERENCES alerts(id),
+    client_id   TEXT NOT NULL,
+    site_id     TEXT NOT NULL,
+    distance_mi REAL,
+    PRIMARY KEY (alert_id, site_id),
+    FOREIGN KEY (client_id, site_id) REFERENCES sites(client_id, id) ON DELETE CASCADE
+  );
+  CREATE INDEX site_alerts_client ON site_alerts(client_id);
+  CREATE INDEX site_alerts_site ON site_alerts(site_id);
+
+  CREATE TABLE feed_status (
+    source   TEXT PRIMARY KEY,
+    ok_at    TEXT,
+    error_at TEXT,
+    error    TEXT
+  );
+  `,
 ]
 
 export function migrate(db) {

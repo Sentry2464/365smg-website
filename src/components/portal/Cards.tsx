@@ -54,7 +54,7 @@ export function AlertsCard({ alerts }: { alerts: Alert[] }) {
       {alerts.length === 0 ? (
         <div className="cp-empty">
           <b>✓ All clear</b>
-          <span>No alerts near your sites in the last 24 hours.</span>
+          <span>No active alerts for your sites right now.</span>
         </div>
       ) : (
         <ul className="cp-alerts">

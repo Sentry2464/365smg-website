@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePortal } from './context'
-import { ALL_SITES, type Site, type SiteId } from './data'
+import { ALL_SITES, type Alert, type Site, type SiteId } from './data'
 
 // The intel map as God's Eye View (gods-eye-view), framed in embed mode. The globe runs
 // on its own VM; the portal tells it what to show with gev:view messages: the camera on
@@ -33,7 +33,7 @@ function cameraFor(sites: Located[]) {
   return { lat, lon, altitude_m, heading_deg: 0, pitch_deg: -60 }
 }
 
-export function GlobeMap({ siteId, url }: { siteId: SiteId; url: string }) {
+export function GlobeMap({ siteId, url, alerts }: { siteId: SiteId; url: string; alerts: Alert[] }) {
   const { sites } = usePortal()
   const frame = useRef<HTMLIFrameElement>(null)
   const seq = useRef(0)
@@ -58,13 +58,18 @@ export function GlobeMap({ siteId, url }: { siteId: SiteId; url: string }) {
     const view = {
       camera: cameraFor(focus.length ? focus : located),
       layers: (Object.keys(LAYERS) as Layer[]).filter((l) => layers[l]).flatMap((l) => LAYERS[l]),
-      annotations: located.slice(0, MAX_PINS).map((s) => ({
-        type: 'pin',
-        latitude: s.lat,
-        longitude: s.lng,
-        label: s.name.slice(0, 120),
-        color: s.id === siteId ? 'amber' : 'primary',
-      })),
+      annotations: located.slice(0, MAX_PINS).map((s) => {
+        // Worst alert at the site colours its pin and names the event.
+        const hit = alerts.find((a) => a.siteId === s.id || a.siteId === null)
+        const color = hit?.severity === 'HIGH' ? 'red' : hit?.severity === 'MED' ? 'amber' : s.id === siteId ? 'cyan' : 'primary'
+        return {
+          type: 'pin',
+          latitude: s.lat,
+          longitude: s.lng,
+          label: (hit ? `${s.name} · ${hit.title}` : s.name).slice(0, 120),
+          color,
+        }
+      }),
     }
     const id = `smg-${++seq.current}`
     const post = () => win.postMessage({ type: 'gev:view', id, view }, origin)
@@ -75,7 +80,7 @@ export function GlobeMap({ siteId, url }: { siteId: SiteId; url: string }) {
     retry.current = setTimeout(() => {
       if (lastAcked.current !== id && lastSent.current === id) post()
     }, 10_000)
-  }, [sites, siteId, layers, origin])
+  }, [sites, siteId, layers, origin, alerts])
 
   useEffect(() => () => clearTimeout(retry.current), [])
 

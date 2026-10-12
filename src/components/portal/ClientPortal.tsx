@@ -132,8 +132,16 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
           </div>
 
           <p className="cp-notice" role="note">
-            <b>Preview.</b> Live alerts, weather and news are being connected. Until then, the news ticker, weather,
-            news, tips and briefings shown here are sample content.
+            {feed.demo ? (
+              <>
+                <b>Demo.</b> The alerts, map incidents and threat levels shown here are sample data.
+              </>
+            ) : (
+              <>
+                <b>Preview.</b> Weather alerts are live from the National Weather Service. The news ticker, weather
+                card, news, tips and briefings are still sample content while more feeds are connected.
+              </>
+            )}
           </p>
 
           <div className="cp-mpicker">
@@ -143,7 +151,7 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
 
           <div className="cp-dash">
             {globeUrl ? (
-              <GlobeMap siteId={siteId} url={globeUrl} />
+              <GlobeMap siteId={siteId} url={globeUrl} alerts={feed.alerts} />
             ) : (
               <IntelMap siteId={siteId} incidents={feed.incidents} demo={feed.demo} />
             )}

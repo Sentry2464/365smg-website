@@ -172,11 +172,28 @@ someone loses their phone, confirm who they are, then use *Reset two-step*.
 | Admin | Clients, sites, users, feedback inbox, audit log. **Not** investigation details |
 | Investigator | Confidential investigation requests (every view is logged) |
 
-**Email.** Fill in the `SMTP_*` lines in `/etc/smg-portal.env` (Microsoft 365 or Google
-Workspace SMTP relay both work), set `NOTIFY_INVESTIGATIONS_TO`, then
-`sudo systemctl restart smg-portal`. Feedback goes to each client's account manager email.
-Investigation alerts carry only the case reference, never the details. Until SMTP is set,
-messages are written to `journalctl -u smg-portal` instead.
+**Email.** Staff notifications: feedback goes to each client's account manager
+(`NOTIFY_DEFAULT_TO` for clients without one), investigation requests to
+`NOTIFY_INVESTIGATIONS_TO` with the case reference only, never the details. Until mail is set
+up, messages are written to `journalctl -u smg-portal` instead.
+
+Microsoft 365 (recommended; HTTPS only, no SMTP passwords): register an app in Entra, give
+it a client secret, and allow it to send **only** as one mailbox with Exchange "RBAC for
+Applications" (role *Application Mail.Send* scoped to that mailbox; no tenant-wide Mail.Send
+permission). Then in `/etc/smg-portal.env`:
+
+```
+SMG_MAIL_PROVIDER=graph
+MS_TENANT_ID=<tenant id>
+MS_CLIENT_ID=<app id>
+MS_CLIENT_SECRET=<secret>
+MAIL_FROM=admin@sentryglobal.net
+MAIL_FROM_NAME=365 SMG Client Portal
+```
+
+`sudo systemctl restart smg-portal`, then check with
+`sudo smg-admin send-test-email --to you@365securitymg.com`. SMTP still works instead
+(`SMTP_HOST` etc.).
 
 ## Live alerts
 

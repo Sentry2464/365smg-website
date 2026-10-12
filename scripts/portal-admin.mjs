@@ -3,15 +3,49 @@
 //
 //   create-staff --email you@365smg.com --name "Your Name" [--role admin|investigator]
 //       Creates a 365 SMG staff account and prints a one-time password.
+//   send-test-email --to someone@365securitymg.com
+//       Sends a test message with the portal's mail settings and reports the result.
 //   seed-demo
 //       Development only: the design's demo client, sites and users.
 import { parseArgs } from 'node:util'
 import { audit, hashPassword, newId, openDatabase, temporaryPassword } from '../src/server/core.mjs'
+import { deliver, mailProvider } from '../src/server/mail.mjs'
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
-  options: { email: { type: 'string' }, name: { type: 'string' }, role: { type: 'string', default: 'admin' } },
+  options: {
+    email: { type: 'string' },
+    name: { type: 'string' },
+    role: { type: 'string', default: 'admin' },
+    to: { type: 'string' },
+  },
 })
+const command = positionals[0]
+
+if (command === 'send-test-email') {
+  if (!values.to) {
+    console.error('usage: send-test-email --to someone@example.com')
+    process.exit(2)
+  }
+  const provider = mailProvider()
+  if (provider === 'log') {
+    console.error('No mail provider is configured (set SMG_MAIL_PROVIDER=graph or SMTP_HOST in /etc/smg-portal.env).')
+    process.exit(1)
+  }
+  try {
+    await deliver(
+      values.to,
+      '365 SMG Client Portal: test email',
+      `This is a test message from the 365 SMG Client Portal (${provider}).\nSent ${new Date().toISOString()}.`,
+    )
+    console.log(`Sent via ${provider} to ${values.to}.`)
+    process.exit(0)
+  } catch (err) {
+    console.error(`Sending failed via ${provider}: ${err instanceof Error ? err.message : err}`)
+    process.exit(1)
+  }
+}
+
 const db = openDatabase()
 
 async function addUser({ email, name, role, clientId = null, password }) {
@@ -25,7 +59,6 @@ async function addUser({ email, name, role, clientId = null, password }) {
   return pass
 }
 
-const command = positionals[0]
 if (command === 'create-staff') {
   const { email, name, role } = values
   if (!email || !name || !['admin', 'investigator'].includes(role)) {

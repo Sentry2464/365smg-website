@@ -102,6 +102,14 @@ if [ ! -f /etc/smg-portal.env ]; then
 SMG_SECRET_KEY=$(head -c 32 /dev/urandom | base64)
 
 # Outgoing email for feedback and investigation alerts (leave blank to log only).
+# Microsoft 365 (recommended): an Entra app allowed to send only as MAIL_FROM.
+SMG_MAIL_PROVIDER=
+MS_TENANT_ID=
+MS_CLIENT_ID=
+MS_CLIENT_SECRET=
+MAIL_FROM=
+MAIL_FROM_NAME=365 SMG Client Portal
+# Or SMTP:
 SMTP_HOST=
 SMTP_PORT=587
 SMTP_USER=

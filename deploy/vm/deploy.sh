@@ -53,6 +53,9 @@ RELEASE=$APP_DIR/releases/$(date +%Y%m%d-%H%M%S)-$REV
 echo "==> Building $REV"
 as_app bash -c "cd '$SRC' && npm ci --no-audit --no-fund && NEXT_TELEMETRY_DISABLED=1 npm run build"
 
+# Keep the admin command in step with the code it runs.
+install -m 0755 "$SRC/deploy/vm/smg-admin" /usr/local/bin/smg-admin
+
 echo "==> Assembling release $(basename "$RELEASE")"
 as_app mkdir -p "$RELEASE"
 as_app cp -a "$SRC/.next/standalone/." "$RELEASE/"

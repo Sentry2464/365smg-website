@@ -5,6 +5,7 @@ import { clientAlerts, liveFeed } from '@/server/alerts'
 import { db } from '@/server/db'
 import { missingList } from '@/server/fdle'
 import { wantedList } from '@/server/publicsafety'
+import { stormList } from '@/server/storms'
 import { registryNear } from '@/server/registry'
 import { audit } from '@/server/core.mjs'
 import { requestMeta, requireUser } from '@/server/session'
@@ -93,6 +94,7 @@ export default async function PortalPage({
       })}
       preview={preview}
       globeUrl={globeUrl()}
+      storms={stormList(db())}
       wanted={wantedList(db())}
       missing={missingList(db())}
       registry={registry}

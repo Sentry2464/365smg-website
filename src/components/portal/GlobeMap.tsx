@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { usePortal } from './context'
+import type { Storm } from '@/server/storms'
 import { ALL_SITES, type Alert, type Site, type SiteId } from './data'
 
 // The intel map as God's Eye View (gods-eye-view), framed in embed mode. The globe runs
@@ -10,12 +11,24 @@ import { ALL_SITES, type Alert, type Site, type SiteId } from './data'
 // Protocol: docs/TOOLS.md "Embed mode" in the gods-eye-view repo.
 
 const LAYERS = {
-  Weather: ['weather-radar', 'weather-cyclones', 'weather-lightning'],
+  Weather: ['weather-radar', 'weather-lightning'],
+  Hurricanes: ['weather-cyclones'],
   Fires: ['fire-perimeters'],
   Earthquakes: ['earthquakes'],
   Flights: ['flights'],
 } as const
 type Layer = keyof typeof LAYERS
+
+// Set when someone turns Hurricanes off, so the auto-on doesn't come back this session.
+const HURRICANES_OFF = 'smg-hurricanes-off'
+const readHurricanesOff = () => {
+  try {
+    return sessionStorage.getItem(HURRICANES_OFF) === '1'
+  } catch {
+    return false
+  }
+}
+const noSubscribe = () => () => {}
 
 const MAX_PINS = 24 // the embed accepts at most 24 annotations
 
@@ -31,6 +44,27 @@ function cameraFor(sites: Located[]) {
   )
   const altitude_m = Math.round(Math.max(25_000, spreadKm * 3_000))
   return { lat, lon, altitude_m, heading_deg: 0, pitch_deg: -60 }
+}
+
+/** Camera looking down on the sites and the storms together (at most 6,000 km up). */
+function cameraWithStorms(sites: Located[], storms: Storm[]) {
+  const pts = [...sites.map((s) => [s.lat, s.lng]), ...storms.map((s) => [s.lat, s.lng])]
+  const lats = pts.map((p) => p[0])
+  const lngs = pts.map((p) => p[1])
+  const [south, north, west, east] = [Math.min(...lats), Math.max(...lats), Math.min(...lngs), Math.max(...lngs)]
+  const lat = (south + north) / 2
+  const lon = (west + east) / 2
+  const spanKm = Math.max((north - south) * 111, (east - west) * 111 * Math.cos((lat * Math.PI) / 180))
+  const altitude_m = Math.round(Math.min(6_000_000, Math.max(250_000, spanKm * 1_400)))
+  return { lat, lon, altitude_m, heading_deg: 0, pitch_deg: -85 }
+}
+
+/** Great-circle distance in miles. */
+function miles(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const r = (x: number) => (x * Math.PI) / 180
+  const h =
+    Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2
+  return 2 * 3958.8 * Math.asin(Math.sqrt(h))
 }
 
 /** Alerts with their own location (police calls) as pins, worst first, one per place and title. */
@@ -54,7 +88,18 @@ function incidentPins(alerts: Alert[]) {
   return pins
 }
 
-export function GlobeMap({ siteId, url, alerts }: { siteId: SiteId; url: string; alerts: Alert[] }) {
+export function GlobeMap({
+  siteId,
+  url,
+  alerts,
+  storms,
+}: {
+  siteId: SiteId
+  url: string
+  alerts: Alert[]
+  /** NHC active storms; null when the list isn't available. */
+  storms: Storm[] | null
+}) {
   const { sites } = usePortal()
   const frame = useRef<HTMLIFrameElement>(null)
   const seq = useRef(0)
@@ -63,21 +108,45 @@ export function GlobeMap({ siteId, url, alerts }: { siteId: SiteId; url: string;
   const retry = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [ready, setReady] = useState(false)
   const [failed, setFailed] = useState(false)
-  const [layers, setLayers] = useState<Record<Layer, boolean>>({
+  // Hurricanes starts on while an Atlantic storm is active, unless turned off this session.
+  const atlantic = !!storms?.some((s) => s.basin === 'AL')
+  const dismissed = useSyncExternalStore(noSubscribe, readHurricanesOff, () => false)
+  const [hurricanes, setHurricanes] = useState<boolean | null>(null) // null: not picked yet
+  const [picked, setPicked] = useState<Record<Exclude<Layer, 'Hurricanes'>, boolean>>({
     Weather: true,
     Fires: false,
     Earthquakes: true,
     Flights: false,
   })
+  const layers = useMemo(
+    () => ({ ...picked, Hurricanes: hurricanes ?? (atlantic && !dismissed) }),
+    [picked, hurricanes, atlantic, dismissed],
+  )
   const origin = new URL(url).origin
+
+  const toggle = (l: Layer) => {
+    if (l !== 'Hurricanes') return setPicked((s) => ({ ...s, [l]: !s[l] }))
+    const on = !layers.Hurricanes
+    setHurricanes(on)
+    try {
+      if (on) sessionStorage.removeItem(HURRICANES_OFF)
+      else sessionStorage.setItem(HURRICANES_OFF, '1')
+    } catch {
+      // no storage: the choice lasts until the page reloads
+    }
+  }
+
+  const located = useMemo(() => sites.filter((s): s is Located => s.lat != null && s.lng != null), [sites])
+  const activeStorms = layers.Hurricanes && storms?.length ? storms : null
 
   const send = useCallback(() => {
     const win = frame.current?.contentWindow
-    const located = sites.filter((s): s is Located => s.lat != null && s.lng != null)
     if (!win || located.length === 0) return
     const focus = siteId === ALL_SITES ? located : located.filter((s) => s.id === siteId)
     const view = {
-      camera: cameraFor(focus.length ? focus : located),
+      camera: activeStorms
+        ? cameraWithStorms(focus.length ? focus : located, activeStorms)
+        : cameraFor(focus.length ? focus : located),
       layers: (Object.keys(LAYERS) as Layer[]).filter((l) => layers[l]).flatMap((l) => LAYERS[l]),
       annotations: [...located.map((s) => {
         // Worst alert at the site colours its pin and names the event.
@@ -101,9 +170,20 @@ export function GlobeMap({ siteId, url, alerts }: { siteId: SiteId; url: string;
     retry.current = setTimeout(() => {
       if (lastAcked.current !== id && lastSent.current === id) post()
     }, 10_000)
-  }, [sites, siteId, layers, origin, alerts])
+  }, [located, siteId, layers, origin, alerts, activeStorms])
 
   useEffect(() => () => clearTimeout(retry.current), [])
+
+  // On a full page load the frame can finish (and say gev:ready) before this component
+  // hydrates, so neither the message nor onLoad reaches it: send once after mounting too.
+  const latestSend = useRef(send)
+  useEffect(() => {
+    latestSend.current = send
+  }, [send])
+  useEffect(() => {
+    const t = setTimeout(() => latestSend.current(), 1500)
+    return () => clearTimeout(t)
+  }, [])
 
   // Listen only to the framed globe, from its own origin.
   useEffect(() => {
@@ -146,7 +226,7 @@ export function GlobeMap({ siteId, url, alerts }: { siteId: SiteId; url: string;
               type="button"
               className="cp-pill"
               aria-pressed={layers[l]}
-              onClick={() => setLayers((s) => ({ ...s, [l]: !s[l] }))}
+              onClick={() => toggle(l)}
             >
               {l}
             </button>
@@ -180,7 +260,36 @@ export function GlobeMap({ siteId, url, alerts }: { siteId: SiteId; url: string;
           </span>
           <span className="cp-legend__hint">Radar: NOAA · Hurricanes: NHC · Quakes: USGS · Flights: adsb.lol</span>
         </div>
+        {layers.Hurricanes && <StormList storms={storms} sites={located} />}
       </div>
     </section>
+  )
+}
+
+/** Active storms under the map: name, strength, distance to the nearest site, NHC advisory. */
+function StormList({ storms, sites }: { storms: Storm[] | null; sites: Located[] }) {
+  if (storms === null) return <p className="cp-meta cp-storms__note">Storm information is unavailable right now.</p>
+  if (storms.length === 0) return <p className="cp-meta cp-storms__note">No active tropical storms.</p>
+  return (
+    <ul className="cp-storms" aria-label="Active tropical storms">
+      {storms.map((s) => {
+        const near = sites
+          .map((site) => ({ site, mi: miles(s, site) }))
+          .sort((a, b) => a.mi - b.mi)[0]
+        return (
+          <li key={s.id}>
+            <span className="cp-storms__name">{s.name}</span>
+            <span className="cp-meta">
+              {s.label}
+              {s.windKt ? ` · ${Math.round(s.windKt * 1.15078)} mph` : ''}
+              {near ? ` · ${Math.round(near.mi).toLocaleString('en-US')} mi from ${near.site.name}` : ''}
+            </span>
+            <a href={s.advisoryUrl} target="_blank" rel="noopener noreferrer">
+              NHC advisory
+            </a>
+          </li>
+        )
+      })}
+    </ul>
   )
 }

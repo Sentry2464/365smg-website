@@ -1899,6 +1899,32 @@ textarea.cp-input {
   pointer-events: none;
 }
 
+/* Active tropical storms under the globe (Hurricanes pill). */
+.cp-storms {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.cp-storms li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 13px;
+}
+.cp-storms__name {
+  font-weight: 600;
+}
+.cp-storms a {
+  margin-left: auto;
+  font-size: 12px;
+}
+.cp-storms__note {
+  margin: 12px 0 0;
+}
+
 /* FBI Wanted list (no map pins: the FBI gives no locations). */
 .cp-wanted {
   margin-top: 24px;

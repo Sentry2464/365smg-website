@@ -16,6 +16,7 @@ import {
 } from './data'
 import { FeedbackSection, InvestigationsSection } from './Forms'
 import { PortalHeader, SiteSelect } from './Header'
+import type { Storm } from '@/server/storms'
 import { GlobeMap } from './GlobeMap'
 import { IntelMap } from './IntelMap'
 import { MissingCard } from './MissingCard'
@@ -59,6 +60,8 @@ export interface ClientPortalProps {
   preview?: PortalPreview
   /** God's Eye View base URL; the placeholder map is shown when it's not set. */
   globeUrl?: string
+  /** NHC active tropical storms; null when the list isn't available. */
+  storms?: Storm[] | null
   /** FBI Wanted lists for the portal's field office(s). */
   wanted?: WantedList[]
   /** FDLE missing persons alerts for the area. */
@@ -67,7 +70,7 @@ export interface ClientPortalProps {
   registry?: RegistryView | null
 }
 
-export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {}, globeUrl, wanted = [], missing = null, registry = null }: ClientPortalProps) {
+export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {}, globeUrl, storms = null, wanted = [], missing = null, registry = null }: ClientPortalProps) {
   // Last site this browser picked; ignored if it isn't one of this client's sites.
   const readSavedSite = useCallback((): SiteId | null => {
     try {
@@ -163,7 +166,7 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
 
           <div className="cp-dash">
             {globeUrl ? (
-              <GlobeMap siteId={siteId} url={globeUrl} alerts={feed.alerts} />
+              <GlobeMap siteId={siteId} url={globeUrl} alerts={feed.alerts} storms={storms} />
             ) : (
               <IntelMap siteId={siteId} incidents={feed.incidents} demo={feed.demo} />
             )}

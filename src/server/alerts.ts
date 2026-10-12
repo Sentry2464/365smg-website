@@ -338,6 +338,14 @@ const POLLERS: [string, Poller][] = [
       run: async (db) => (await import('./publicsafety')).pollWanted(db),
     },
   ],
+  [
+    'NHC storms',
+    {
+      enabled: () => process.env.SMG_FEED_NHC !== '0',
+      every: 3, // 15 minutes; NHC advisories come every 3-6 hours, specials in between
+      run: async (db) => (await import('./storms')).pollStorms(db),
+    },
+  ],
 ]
 
 /** Starts polling every 5 minutes in this server process (once, however often it's called). */

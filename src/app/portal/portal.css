@@ -1959,3 +1959,9 @@ textarea.cp-input {
 .cp-wanted__source a + a::before {
   content: ' · ';
 }
+.cp-missing__type {
+  align-self: flex-start;
+  width: auto;
+  padding: 0 6px;
+  white-space: nowrap;
+}

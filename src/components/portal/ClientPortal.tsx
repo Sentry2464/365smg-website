@@ -18,7 +18,9 @@ import { FeedbackSection, InvestigationsSection } from './Forms'
 import { PortalHeader, SiteSelect } from './Header'
 import { GlobeMap } from './GlobeMap'
 import { IntelMap } from './IntelMap'
+import { MissingCard } from './MissingCard'
 import { WantedCard } from './WantedCard'
+import type { MissingList } from '@/server/fdle'
 import type { WantedList } from '@/server/publicsafety'
 import { Ticker } from './Ticker'
 
@@ -57,9 +59,11 @@ export interface ClientPortalProps {
   globeUrl?: string
   /** FBI Wanted lists for the portal's field office(s). */
   wanted?: WantedList[]
+  /** FDLE missing persons alerts for the area. */
+  missing?: MissingList | null
 }
 
-export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {}, globeUrl, wanted = [] }: ClientPortalProps) {
+export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {}, globeUrl, wanted = [], missing = null }: ClientPortalProps) {
   // Last site this browser picked; ignored if it isn't one of this client's sites.
   const readSavedSite = useCallback((): SiteId | null => {
     try {
@@ -166,6 +170,7 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
             <BriefingsCard />
           </div>
 
+          <MissingCard list={missing} />
           <WantedCard lists={wanted} />
 
           <InvestigationsSection forceSent={preview.formsSent} />

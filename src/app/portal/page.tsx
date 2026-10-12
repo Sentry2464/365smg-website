@@ -3,6 +3,7 @@ import { ClientPortal, type PortalPreview } from '@/components/portal/ClientPort
 import { placeSites, sampleFeed, type Site, type ThreatLevel } from '@/components/portal/data'
 import { clientAlerts, liveFeed } from '@/server/alerts'
 import { db } from '@/server/db'
+import { missingList } from '@/server/fdle'
 import { wantedList } from '@/server/publicsafety'
 import { requireUser } from '@/server/session'
 import { clientScope } from '@/server/store'
@@ -79,6 +80,7 @@ export default async function PortalPage({
       preview={preview}
       globeUrl={globeUrl()}
       wanted={wantedList(db())}
+      missing={missingList(db())}
     />
   )
 }

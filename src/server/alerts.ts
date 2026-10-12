@@ -232,6 +232,14 @@ const POLLERS: [string, Poller][] = [
     },
   ],
   [
+    'FDLE missing persons',
+    {
+      enabled: () => process.env.SMG_FEED_FDLE !== '0',
+      every: 6, // 30 minutes
+      run: async (db) => (await import('./fdle')).pollFdle(db),
+    },
+  ],
+  [
     'FBI Wanted',
     {
       enabled: () => process.env.SMG_FEED_FBI !== '0',

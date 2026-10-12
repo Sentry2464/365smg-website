@@ -19,6 +19,8 @@ Environment=SMG_DATA_DIR=/var/lib/smg
 EnvironmentFile=-/etc/smg-portal.env
 Restart=on-failure
 RestartSec=5
+# Node exits 143 on SIGTERM; a normal stop or restart, not a failure.
+SuccessExitStatus=143
 
 NoNewPrivileges=true
 PrivateTmp=true

@@ -189,7 +189,10 @@ MS_CLIENT_ID=<app id>
 MS_CLIENT_SECRET=<secret>
 MAIL_FROM=admin@sentryglobal.net
 MAIL_FROM_NAME=365 SMG Client Portal
+MS_CLIENT_SECRET_EXPIRES=2027-10-12   # the secret's expiry date from Entra
 ```
+
+Portal admin shows a warning 30 days before the secret expires.
 
 `sudo systemctl restart smg-portal`, then check with
 `sudo smg-admin send-test-email --to you@365securitymg.com`. SMTP still works instead

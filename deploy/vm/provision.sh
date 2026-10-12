@@ -107,6 +107,8 @@ SMG_MAIL_PROVIDER=
 MS_TENANT_ID=
 MS_CLIENT_ID=
 MS_CLIENT_SECRET=
+# The secret's expiry date (YYYY-MM-DD) from Entra; Portal admin warns 30 days before.
+MS_CLIENT_SECRET_EXPIRES=
 MAIL_FROM=
 MAIL_FROM_NAME=365 SMG Client Portal
 # Or SMTP:

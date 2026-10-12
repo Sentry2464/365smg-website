@@ -13,6 +13,20 @@ export const metadata: Metadata = { title: 'Admin | 365 SMG Client Portal' }
 
 const roleLabel = { admin: 'Admin', investigator: 'Investigator', client: 'Client' }
 
+/** Warns 30 days before the Microsoft 365 mail secret (MS_CLIENT_SECRET_EXPIRES) runs out. */
+function mailSecretWarning() {
+  const raw = process.env.MS_CLIENT_SECRET_EXPIRES
+  if (!raw || process.env.SMG_MAIL_PROVIDER !== 'graph') return null
+  const expires = new Date(raw)
+  if (Number.isNaN(expires.getTime())) return null
+  const days = Math.ceil((expires.getTime() - Date.now()) / 86_400_000)
+  if (days > 30) return null
+  const when = expires.toLocaleDateString('en-US', { dateStyle: 'long', timeZone: 'America/New_York' })
+  return days <= 0
+    ? `The Microsoft 365 mail secret expired on ${when}. Portal emails are not being sent until a new secret is set on the server.`
+    : `The Microsoft 365 mail secret expires on ${when} (in ${days} day${days === 1 ? '' : 's'}). Create a new one in Entra and update MS_CLIENT_SECRET and MS_CLIENT_SECRET_EXPIRES on the server.`
+}
+
 export default async function AdminHome() {
   const { user } = await requireUser(['admin', 'investigator'])
   if (user.role === 'investigator') redirect('/portal/admin/investigations')
@@ -21,6 +35,11 @@ export default async function AdminHome() {
 
   return (
     <AdminShell role={user.role} name={user.name} current="/portal/admin" title="Clients and users">
+      {mailSecretWarning() && (
+        <p className="cp-notice" role="alert">
+          <b>Email.</b> {mailSecretWarning()}
+        </p>
+      )}
       <section className="cp-card">
         <div className="cp-card__head">
           <h2 className="cp-card__title">Clients</h2>

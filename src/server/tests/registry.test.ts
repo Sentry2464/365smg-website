@@ -143,4 +143,28 @@ describe('FDLE registry', () => {
     ])
     expect(registryNear(db, c.id)!.people.map((p) => p.id)).toEqual(['1'])
   })
+
+  it('turns new clients on with SMG_REGISTRY_DEFAULT=1 and asks for a run when sites change', () => {
+    const admin = { id: 'system' }
+    const requested = () => !!db.prepare(`SELECT 1 FROM feed_cache WHERE key = 'registry:requested'`).get()
+    const off = createClient(db, admin, { name: 'Off', industry: 'Office', industryPlural: '', managerEmail: '' })
+    createSite(db, admin, off.id, { name: 'A', city: 'Orlando, FL', timeZone: '', lat: '28.5', lng: '-81.4' })
+    expect(requested()).toBe(false)
+
+    process.env.SMG_REGISTRY_DEFAULT = '1'
+    try {
+      const on = createClient(db, admin, { name: 'On', industry: 'Office', industryPlural: '', managerEmail: '' })
+      expect(registryNear(db, on.id)).not.toBeNull()
+      expect(registryNear(db, off.id)).toBeNull()
+      db.prepare(`DELETE FROM feed_cache WHERE key = 'registry:requested'`).run()
+      createSite(db, admin, on.id, { name: 'B', city: 'Sanford, FL', timeZone: '', lat: '28.8', lng: '-81.27' })
+      expect(requested()).toBe(true)
+      const audit = db.prepare(`SELECT detail FROM audit_log WHERE action = 'client.registry_on' AND client_id = ?`).get(on.id) as {
+        detail: string
+      }
+      expect(JSON.parse(audit.detail)).toEqual({ via: 'default' })
+    } finally {
+      delete process.env.SMG_REGISTRY_DEFAULT
+    }
+  })
 })

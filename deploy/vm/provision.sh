@@ -123,6 +123,8 @@ SMG_API_CONTACT=admin@365securitymg.com
 # Orlando PD dispatched calls: set to 1 once the City has OK'd showing them to clients.
 SMG_FEED_OPD=0
 SMG_CRIME_RADIUS_MI=1
+# 1: new clients get the sexual offender registry card (smg-admin registry for existing ones).
+SMG_REGISTRY_DEFAULT=0
 
 # Public address used for links in emails.
 SMG_PUBLIC_URL=https://portal.365securitymg.com

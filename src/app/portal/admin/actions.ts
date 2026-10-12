@@ -108,12 +108,7 @@ export async function toggleRegistry(_: AdminState, form: FormData): Promise<Adm
     const on = field(form, 'enable') === '1'
     setRegistryEnabled(db(), actor, String(field(form, 'clientId')), on)
     // Fetch the client's county files now rather than at the next 6-hourly run.
-    // If a run is already going it may predate this client, so run again after it.
-    if (on) {
-      void Promise.all([import('@/server/alerts'), import('@/server/registry')])
-        .then(([a, r]) => a.runFeed('FDLE registry', () => r.pollRegistry(db()), { again: true }))
-        .catch(() => {})
-    }
+    if (on) void import('@/server/alerts').then((a) => a.runRegistryNow(db())).catch(() => {})
     return {
       message: on
         ? 'Registry card turned on. FDLE’s county file is downloading and appears on the client’s dashboard within a few minutes.'

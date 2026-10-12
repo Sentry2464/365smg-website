@@ -1,5 +1,5 @@
 import type { Database } from 'better-sqlite3'
-import { audit, hashPassword, newId, temporaryPassword } from './core.mjs'
+import { audit, hashPassword, newId, registryDefault, requestRegistryRun, setRegistryFor, temporaryPassword } from './core.mjs'
 import { addBusinessDays, todayEt } from './dates'
 
 export type Role = 'admin' | 'investigator' | 'client'
@@ -235,6 +235,7 @@ export function createClient(
      VALUES (@id, @name, @industry, @industry_plural, @manager_email)`,
   ).run(row)
   audit(db, { actorId: actor.id, clientId: row.id, action: 'client.create', target: row.id, ip: actor.ip })
+  if (registryDefault()) setRegistryFor(db, actor, [row.id], true, 'default')
   return row
 }
 
@@ -273,6 +274,8 @@ export function createSite(
      VALUES (@id, @client_id, @slug, @name, @city, @time_zone, @lat, @lng)`,
   ).run(row)
   audit(db, { actorId: actor.id, clientId, action: 'site.create', target: row.id, ip: actor.ip })
+  // A new site may be in a county not downloaded yet.
+  if (row.lat != null && getClient(db, clientId)?.registry_enabled) requestRegistryRun(db)
   return row
 }
 
@@ -339,14 +342,7 @@ export function resetMfa(db: Database, actor: Actor, userId: string) {
 /** Opts a client in or out of seeing the FDLE registry near their sites. */
 export function setRegistryEnabled(db: Database, actor: Actor, clientId: string, enabled: boolean) {
   if (!getClient(db, clientId)) throw new ValidationError('Client not found.')
-  db.prepare('UPDATE clients SET registry_enabled = ? WHERE id = ?').run(enabled ? 1 : 0, clientId)
-  audit(db, {
-    actorId: actor.id,
-    clientId,
-    action: enabled ? 'client.registry_on' : 'client.registry_off',
-    target: clientId,
-    ip: actor.ip,
-  })
+  setRegistryFor(db, actor, [clientId], enabled)
 }
 
 export function setUserDisabled(db: Database, actor: Actor, userId: string, disabled: boolean) {

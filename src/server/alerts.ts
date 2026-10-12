@@ -372,6 +372,16 @@ export function runFeed(name: string, fn: () => Promise<unknown>, { again = fals
   return p
 }
 
+/**
+ * Refreshes the registry now, or right after a run in progress (which may predate the
+ * change), and clears any pending request.
+ */
+export function runRegistryNow(db: Database) {
+  db.prepare(`DELETE FROM feed_cache WHERE key = 'registry:requested'`).run()
+  if (process.env.SMG_FEED_REGISTRY === '0') return Promise.resolve()
+  return runFeed('FDLE registry', async () => (await import('./registry')).pollRegistry(db), { again: true })
+}
+
 /** Starts polling every 5 minutes in this server process (once, however often it's called). */
 export function startAlertPolling(open: () => Database) {
   const g = globalThis as unknown as { smgAlertPoller?: ReturnType<typeof setInterval> }
@@ -384,6 +394,8 @@ export function startAlertPolling(open: () => Database) {
     for (const [name, poll] of POLLERS) {
       if (poll.enabled() && n % poll.every === 0) void runFeed(name, () => poll.run(db))
     }
+    // Registry refresh asked for since (a new site, or clients turned on from smg-admin).
+    if (db.prepare(`SELECT 1 FROM feed_cache WHERE key = 'registry:requested'`).get()) void runRegistryNow(db)
   }
   run()
   g.smgAlertPoller = setInterval(run, 5 * 60_000)

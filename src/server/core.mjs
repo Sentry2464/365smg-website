@@ -269,3 +269,41 @@ export function audit(db, entry) {
     detail: entry.detail ? JSON.stringify(entry.detail) : null,
   })
 }
+
+// ---------- sexual offender registry flags (shared with the smg-admin CLI) ----------
+
+/** New clients get the registry card when SMG_REGISTRY_DEFAULT=1. */
+export const registryDefault = () => process.env.SMG_REGISTRY_DEFAULT === '1'
+
+/** Asks the running server to refresh the registry within 5 minutes (sites or opt-ins changed). */
+export function requestRegistryRun(db) {
+  db.prepare(`INSERT OR REPLACE INTO feed_cache (key, json) VALUES ('registry:requested', 'true')`).run()
+}
+
+/**
+ * Turns the registry card on or off for clients (all active ones when `clientIds` is null)
+ * and audits each change. Returns the ids that changed.
+ */
+export function setRegistryFor(db, actor, clientIds, enabled, via) {
+  const rows = clientIds
+    ? clientIds.map((id) => db.prepare('SELECT id, registry_enabled FROM clients WHERE id = ?').get(id))
+    : db.prepare('SELECT id, registry_enabled FROM clients WHERE disabled_at IS NULL').all()
+  const missing = clientIds?.filter((id, i) => !rows[i]) ?? []
+  if (missing.length) throw new Error(`client not found: ${missing.join(', ')}`)
+  const changed = rows.filter((r) => !!r.registry_enabled !== enabled).map((r) => r.id)
+  db.transaction(() => {
+    for (const id of changed) {
+      db.prepare('UPDATE clients SET registry_enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id)
+      audit(db, {
+        actorId: actor.id ?? null,
+        clientId: id,
+        action: enabled ? 'client.registry_on' : 'client.registry_off',
+        target: id,
+        ip: actor.ip ?? null,
+        detail: via ? { via } : undefined,
+      })
+    }
+    if (enabled && changed.length) requestRegistryRun(db)
+  })()
+  return changed
+}

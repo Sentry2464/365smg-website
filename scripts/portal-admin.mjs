@@ -5,10 +5,13 @@
 //       Creates a 365 SMG staff account and prints a one-time password.
 //   send-test-email --to someone@365securitymg.com
 //       Sends a test message with the portal's mail settings and reports the result.
+//   registry --enable-all | --disable-all | --client <id> [--client <id>…] [--off]
+//       Turns the sexual offender registry card on (or off) for clients. Audited; the
+//       running portal downloads any new counties within 5 minutes.
 //   seed-demo
 //       Development only: the design's demo client, sites and users.
 import { parseArgs } from 'node:util'
-import { audit, hashPassword, newId, openDatabase, temporaryPassword } from '../src/server/core.mjs'
+import { audit, hashPassword, newId, openDatabase, setRegistryFor, temporaryPassword } from '../src/server/core.mjs'
 import { deliver, mailProvider } from '../src/server/mail.mjs'
 
 const { positionals, values } = parseArgs({
@@ -18,6 +21,10 @@ const { positionals, values } = parseArgs({
     name: { type: 'string' },
     role: { type: 'string', default: 'admin' },
     to: { type: 'string' },
+    'enable-all': { type: 'boolean' },
+    'disable-all': { type: 'boolean' },
+    client: { type: 'string', multiple: true },
+    off: { type: 'boolean' },
   },
 })
 const command = positionals[0]
@@ -75,6 +82,23 @@ if (command === 'create-staff') {
   const pass = await addUser({ email, name, role })
   console.log(`Created ${role} ${email}.\nTemporary password (shown once): ${pass}`)
   console.log('Sign in at https://portal.365securitymg.com/portal/login to choose a password and set up two-step login.')
+} else if (command === 'registry') {
+  const all = values['enable-all'] || values['disable-all']
+  if ((values['enable-all'] && values['disable-all']) || (all && values.client) || (!all && !values.client)) {
+    console.error('usage: registry --enable-all | --disable-all | --client <id> [--client <id>…] [--off]')
+    process.exit(2)
+  }
+  const enabled = values['enable-all'] || (!!values.client && !values.off)
+  let changed
+  try {
+    changed = setRegistryFor(db, { id: null }, all ? null : values.client, enabled, 'cli')
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : err)
+    process.exit(1)
+  }
+  const on = db.prepare('SELECT COUNT(*) AS n FROM clients WHERE registry_enabled = 1 AND disabled_at IS NULL').get().n
+  console.log(`Registry turned ${enabled ? 'on' : 'off'} for ${changed.length} client(s); ${on} active client(s) have it on now.`)
+  if (enabled && changed.length) console.log('The portal downloads any new county files within 5 minutes (feed_status: fdle-registry).')
 } else if (command === 'seed-demo') {
   if (process.env.NODE_ENV === 'production') {
     console.error('seed-demo is for development only.')
@@ -105,6 +129,6 @@ if (command === 'create-staff') {
   await addUser({ email: 'sam@lakemary.test', name: 'Sam Patel', role: 'client', clientId: lm, password: pw })
   console.log(`Demo data created. Every demo account starts with the password "${pw}".`)
 } else {
-  console.error('commands: create-staff, seed-demo')
+  console.error('commands: create-staff, send-test-email, registry, seed-demo')
   process.exit(2)
 }

@@ -2,6 +2,7 @@
 # Portal database tasks, run as the app user. See scripts/portal-admin.mjs.
 #   sudo smg-admin create-staff --email you@365securitymg.com --name "Your Name" [--role investigator]
 #   sudo smg-admin send-test-email --to you@365securitymg.com
+#   sudo smg-admin registry --enable-all   (or --disable-all, or --client <id> [--off])
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }
 [ -d /opt/smg-portal/src/node_modules ] || { echo "deploy first: sudo smg-deploy" >&2; exit 1; }

@@ -18,3 +18,13 @@ export function audit(
     detail?: Record<string, unknown>
   },
 ): void
+
+export function registryDefault(): boolean
+export function requestRegistryRun(db: Database): void
+export function setRegistryFor(
+  db: Database,
+  actor: { id?: string | null; ip?: string | null },
+  clientIds: string[] | null,
+  enabled: boolean,
+  via?: string,
+): string[]

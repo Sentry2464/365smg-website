@@ -150,6 +150,18 @@ const MIGRATIONS = [
     error    TEXT
   );
   `,
+  `
+  -- Where an alert happened (point feeds such as police calls), and geocoding results.
+  ALTER TABLE alerts ADD COLUMN lat REAL;
+  ALTER TABLE alerts ADD COLUMN lng REAL;
+
+  CREATE TABLE geocode_cache (
+    query TEXT PRIMARY KEY,
+    lat   REAL,  -- NULL: no match
+    lng   REAL,
+    at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  );
+  `,
 ]
 
 export function migrate(db) {

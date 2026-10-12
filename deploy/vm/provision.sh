@@ -109,6 +109,10 @@ SMTP_PASS=
 SMTP_FROM=Client Portal <portal@365smg.com>
 # Contact sent to public data APIs (NWS etc.) in the User-Agent, as they ask.
 SMG_API_CONTACT=admin@365securitymg.com
+# Live alert feeds (see deploy/README.md, "Live alerts"). NWS weather is on by default.
+# Orlando PD dispatched calls: set to 1 once the City has OK'd showing them to clients.
+SMG_FEED_OPD=0
+SMG_CRIME_RADIUS_MI=1
 
 # Investigations alerts go only here (case reference only, never the details).
 NOTIFY_INVESTIGATIONS_TO=

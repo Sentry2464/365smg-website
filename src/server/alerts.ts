@@ -23,6 +23,11 @@ export interface FeedAlert {
   area: string | null
   startsAt: string | null
   endsAt: string | null
+  /** Where it happened, for point feeds (police calls). */
+  lat?: number | null
+  lng?: number | null
+  /** Distance from the site it's being linked to. */
+  distanceMi?: number | null
 }
 
 export interface AlertRow {
@@ -37,6 +42,8 @@ export interface AlertRow {
   ends_at: string | null
   first_seen_at: string
   distance_mi: number | null
+  lat: number | null
+  lng: number | null
 }
 
 // ---------- NWS (api.weather.gov, public domain) ----------
@@ -95,25 +102,39 @@ export function parseNws(json: unknown): FeedAlert[] {
 
 // ---------- storage ----------
 
-/** Makes `items` the complete set of `source` alerts for one site. */
+/**
+ * Makes `items` the complete set of `source` alerts for one site. With `keepMissing`,
+ * alerts that dropped off the feed stay linked until their end time (rolling feeds such
+ * as police calls only list the last hour or so).
+ */
 export function syncSiteAlerts(
   db: Database,
   source: string,
   site: { id: string; client_id: string },
   items: FeedAlert[],
+  { keepMissing = false } = {},
 ) {
   const upsert = db.prepare(
-    `INSERT INTO alerts (id, source, event, severity, headline, url, area, starts_at, ends_at)
-     VALUES (@id, @source, @event, @severity, @headline, @url, @area, @startsAt, @endsAt)
+    `INSERT INTO alerts (id, source, event, severity, headline, url, area, starts_at, ends_at, lat, lng)
+     VALUES (@id, @source, @event, @severity, @headline, @url, @area, @startsAt, @endsAt, @lat, @lng)
      ON CONFLICT(id) DO UPDATE SET event = excluded.event, severity = excluded.severity,
        headline = excluded.headline, url = excluded.url, area = excluded.area,
-       starts_at = excluded.starts_at, ends_at = excluded.ends_at,
+       starts_at = excluded.starts_at, ends_at = excluded.ends_at, lat = excluded.lat, lng = excluded.lng,
        last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`,
   )
   const link = db.prepare(
-    `INSERT OR IGNORE INTO site_alerts (alert_id, client_id, site_id, distance_mi) VALUES (?, ?, ?, NULL)`,
+    `INSERT INTO site_alerts (alert_id, client_id, site_id, distance_mi) VALUES (?, ?, ?, ?)
+     ON CONFLICT(alert_id, site_id) DO UPDATE SET distance_mi = excluded.distance_mi`,
   )
   db.transaction(() => {
+    if (!keepMissing) unlinkMissing()
+    for (const a of items) {
+      upsert.run({ lat: null, lng: null, ...a, source })
+      link.run(a.id, site.client_id, site.id, a.distanceMi ?? null)
+    }
+  })()
+
+  function unlinkMissing() {
     const keep = new Set(items.map((a) => a.id))
     const current = db
       .prepare(
@@ -123,14 +144,10 @@ export function syncSiteAlerts(
       .all(site.id, source) as { alert_id: string }[]
     const unlink = db.prepare(`DELETE FROM site_alerts WHERE alert_id = ? AND site_id = ?`)
     for (const { alert_id } of current) if (!keep.has(alert_id)) unlink.run(alert_id, site.id)
-    for (const a of items) {
-      upsert.run({ ...a, source })
-      link.run(a.id, site.client_id, site.id)
-    }
-  })()
+  }
 }
 
-function setStatus(db: Database, source: string, error: string | null) {
+export function setStatus(db: Database, source: string, error: string | null) {
   if (error) {
     db.prepare(
       `INSERT INTO feed_status (source, error_at, error) VALUES (?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)
@@ -177,12 +194,29 @@ export async function pollNws(db: Database, fetchImpl: typeof fetch = fetch) {
   return { points: byPoint.size, failures }
 }
 
+/** Feeds polled on each run. Orlando PD is opt-in (SMG_FEED_OPD=1) until the City OKs reuse. */
+const POLLERS: [string, { enabled: () => boolean; run: (db: Database) => Promise<unknown> }][] = [
+  ['NWS', { enabled: () => process.env.SMG_FEED_NWS !== '0', run: (db) => pollNws(db) }],
+  [
+    'Orlando PD',
+    {
+      enabled: () => process.env.SMG_FEED_OPD === '1',
+      run: async (db) => (await import('./opd')).pollOpd(db),
+    },
+  ],
+]
+
 /** Starts polling every 5 minutes in this server process (once, however often it's called). */
 export function startAlertPolling(open: () => Database) {
   const g = globalThis as unknown as { smgAlertPoller?: ReturnType<typeof setInterval> }
   if (g.smgAlertPoller) return
-  const run = () =>
-    pollNws(open()).catch((err) => console.error('[alerts] NWS poll failed:', err instanceof Error ? err.message : err))
+  const run = async () => {
+    const db = open()
+    for (const [name, poll] of POLLERS) {
+      if (!poll.enabled()) continue
+      await poll.run(db).catch((err) => console.error(`[alerts] ${name} poll failed:`, err instanceof Error ? err.message : err))
+    }
+  }
   void run()
   g.smgAlertPoller = setInterval(run, 5 * 60_000)
   g.smgAlertPoller.unref?.()
@@ -195,7 +229,7 @@ export function clientAlerts(db: Database, clientId: string, now = new Date()) {
   return db
     .prepare(
       `SELECT sa.alert_id, sa.site_id, sa.distance_mi, a.source, a.event, a.severity, a.headline, a.url,
-              a.starts_at, a.ends_at, a.first_seen_at
+              a.starts_at, a.ends_at, a.first_seen_at, a.lat, a.lng
        FROM site_alerts sa JOIN alerts a ON a.id = sa.alert_id
        WHERE sa.client_id = ? AND (a.ends_at IS NULL OR a.ends_at > ?)`,
     )
@@ -204,7 +238,7 @@ export function clientAlerts(db: Database, clientId: string, now = new Date()) {
 
 const RANK: Record<Severity, number> = { HIGH: 3, MED: 2, LOW: 1 }
 const THREAT: Record<Severity, ThreatLevel> = { HIGH: 'HIGH', MED: 'ELEVATED', LOW: 'LOW' }
-const SOURCE_LABEL: Record<string, string> = { nws: 'NWS' }
+const SOURCE_LABEL: Record<string, string> = { nws: 'NWS', opd: 'Orlando PD' }
 
 function age(iso: string | null, now: Date) {
   if (!iso) return ''
@@ -232,12 +266,14 @@ export function liveFeed(sites: Site[], rows: AlertRow[], now = new Date()): Fee
       time: age(r.starts_at ?? r.first_seen_at, now),
       source: SOURCE_LABEL[r.source] ?? r.source.toUpperCase(),
       url: r.url,
+      lat: r.lat,
+      lng: r.lng,
     }
     // One entry when it covers every site; otherwise one per affected site.
     if (sites.length > 1 && hits.length === sites.length) alerts.push({ ...base, id: alertId, siteId: null })
     else
       for (const h of hits)
-        alerts.push({ ...base, id: `${alertId}@${h.site_id}`, siteId: h.site_id, distanceMi: h.distance_mi ?? undefined })
+        alerts.push({ ...base, id: `${alertId}@${h.site_id}`, siteId: h.site_id, distanceMi: h.distance_mi != null ? Math.round(h.distance_mi * 10) / 10 : undefined })
   }
   alerts.sort((a, b) => RANK[b.severity] - RANK[a.severity] || a.title.localeCompare(b.title))
 

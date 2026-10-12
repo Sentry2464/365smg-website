@@ -30,6 +30,9 @@ export interface Alert {
   time: string
   source: string
   url: string
+  /** Where it happened, when the feed gives a point (police calls). */
+  lat?: number | null
+  lng?: number | null
 }
 
 export interface SiteSummary {

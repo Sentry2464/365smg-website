@@ -178,6 +178,20 @@ Workspace SMTP relay both work), set `NOTIFY_INVESTIGATIONS_TO`, then
 Investigation alerts carry only the case reference, never the details. Until SMTP is set,
 messages are written to `journalctl -u smg-portal` instead.
 
+## Live alerts
+
+The portal checks public feeds every 5 minutes from the `smg-portal` service and shows
+each client only the alerts at or near their own sites (sites need coordinates).
+
+| Feed | Setting in `/etc/smg-portal.env` | Notes |
+| --- | --- | --- |
+| National Weather Service watches and warnings | on unless `SMG_FEED_NWS=0` | Public domain. Matched to each site's location. |
+| Orlando PD dispatched calls | `SMG_FEED_OPD=1` | Crime-related calls within `SMG_CRIME_RADIUS_MI` (default 1) of a site, kept 12 hours. Block addresses are placed with the US Census geocoder. Turn on only with the City's OK to show them to clients. |
+
+`SMG_API_CONTACT` is the contact sent to these services, as they ask. Feed health:
+`sudo -u smg sqlite3 /var/lib/smg/portal.db "select * from feed_status"`. After changing
+settings, `sudo systemctl restart smg-portal`.
+
 ## 7. Backups
 
 Use *Datacenter › Backup › Add*: VM 150, schedule `02:30`, mode *Snapshot*, retention

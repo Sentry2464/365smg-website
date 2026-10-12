@@ -33,6 +33,26 @@ function cameraFor(sites: Located[]) {
   return { lat, lon, altitude_m, heading_deg: 0, pitch_deg: -60 }
 }
 
+/** Alerts with their own location (police calls) as pins, worst first, one per place and title. */
+function incidentPins(alerts: Alert[]) {
+  const seen = new Set<string>()
+  const pins = []
+  for (const a of alerts) {
+    if (a.lat == null || a.lng == null) continue
+    const key = `${a.lat},${a.lng},${a.title}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    pins.push({
+      type: 'pin',
+      latitude: a.lat,
+      longitude: a.lng,
+      label: `${a.title} · ${a.source}`.slice(0, 120),
+      color: a.severity === 'HIGH' ? 'red' : 'amber',
+    })
+  }
+  return pins
+}
+
 export function GlobeMap({ siteId, url, alerts }: { siteId: SiteId; url: string; alerts: Alert[] }) {
   const { sites } = usePortal()
   const frame = useRef<HTMLIFrameElement>(null)
@@ -58,7 +78,7 @@ export function GlobeMap({ siteId, url, alerts }: { siteId: SiteId; url: string;
     const view = {
       camera: cameraFor(focus.length ? focus : located),
       layers: (Object.keys(LAYERS) as Layer[]).filter((l) => layers[l]).flatMap((l) => LAYERS[l]),
-      annotations: located.slice(0, MAX_PINS).map((s) => {
+      annotations: [...located.map((s) => {
         // Worst alert at the site colours its pin and names the event.
         const hit = alerts.find((a) => a.siteId === s.id || a.siteId === null)
         const color = hit?.severity === 'HIGH' ? 'red' : hit?.severity === 'MED' ? 'amber' : s.id === siteId ? 'cyan' : 'primary'
@@ -69,7 +89,7 @@ export function GlobeMap({ siteId, url, alerts }: { siteId: SiteId; url: string;
           label: (hit ? `${s.name} · ${hit.title}` : s.name).slice(0, 120),
           color,
         }
-      }),
+      }), ...incidentPins(alerts)].slice(0, MAX_PINS),
     }
     const id = `smg-${++seq.current}`
     const post = () => win.postMessage({ type: 'gev:view', id, view }, origin)

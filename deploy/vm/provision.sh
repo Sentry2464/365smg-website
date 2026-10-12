@@ -107,6 +107,9 @@ SMTP_PORT=587
 SMTP_USER=
 SMTP_PASS=
 SMTP_FROM=Client Portal <portal@365smg.com>
+# Contact sent to public data APIs (NWS etc.) in the User-Agent, as they ask.
+SMG_API_CONTACT=admin@365securitymg.com
+
 # Investigations alerts go only here (case reference only, never the details).
 NOTIFY_INVESTIGATIONS_TO=
 # Feedback goes to each client's account manager; this catches clients without one.

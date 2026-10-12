@@ -155,13 +155,13 @@ export async function pollNws(db: Database, fetchImpl: typeof fetch = fetch) {
     const key = `${s.lat.toFixed(4)},${s.lng.toFixed(4)}`
     byPoint.set(key, [...(byPoint.get(key) ?? []), s])
   }
-  const contact = process.env.SMG_NWS_CONTACT || 'ops@365smg.com'
+  const contact = process.env.SMG_API_CONTACT || 'admin@365securitymg.com'
   let failures = 0
   let lastError = ''
   for (const [point, group] of byPoint) {
     try {
       const res = await fetchImpl(`${NWS}/alerts/active?point=${point}`, {
-        headers: { 'User-Agent': `365SMG-ClientPortal (${contact})`, Accept: 'application/geo+json' },
+        headers: { 'User-Agent': `365SMG-ClientPortal (portal.365smg.com, ${contact})`, Accept: 'application/geo+json' },
         signal: AbortSignal.timeout(15_000),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status} for point ${point}`)

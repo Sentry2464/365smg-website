@@ -46,6 +46,18 @@ export interface AlertRow {
   lng: number | null
 }
 
+/** User-Agent for every outbound feed request: who we are and how to reach us, as the services ask. */
+export function userAgent() {
+  return `365SMG-ClientPortal (portal.365smg.com, ${process.env.SMG_API_CONTACT || 'admin@365securitymg.com'})`
+}
+
+/** A readable reason for a failed request (fetch errors often hide it in `cause`). */
+export function errorText(err: unknown) {
+  if (!(err instanceof Error)) return String(err)
+  const cause = (err as { cause?: { code?: string; message?: string } }).cause
+  return [err.message || err.name, cause?.code ?? cause?.message].filter(Boolean).join(': ') || 'unknown error'
+}
+
 // ---------- NWS (api.weather.gov, public domain) ----------
 
 const NWS = 'https://api.weather.gov'
@@ -172,13 +184,12 @@ export async function pollNws(db: Database, fetchImpl: typeof fetch = fetch) {
     const key = `${s.lat.toFixed(4)},${s.lng.toFixed(4)}`
     byPoint.set(key, [...(byPoint.get(key) ?? []), s])
   }
-  const contact = process.env.SMG_API_CONTACT || 'admin@365securitymg.com'
   let failures = 0
   let lastError = ''
   for (const [point, group] of byPoint) {
     try {
       const res = await fetchImpl(`${NWS}/alerts/active?point=${point}`, {
-        headers: { 'User-Agent': `365SMG-ClientPortal (portal.365smg.com, ${contact})`, Accept: 'application/geo+json' },
+        headers: { 'User-Agent': userAgent(), Accept: 'application/geo+json' },
         signal: AbortSignal.timeout(15_000),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status} for point ${point}`)
@@ -187,7 +198,7 @@ export async function pollNws(db: Database, fetchImpl: typeof fetch = fetch) {
     } catch (err) {
       // Keep the last known alerts for these sites rather than clearing them on a failed request.
       failures++
-      lastError = err instanceof Error ? err.message : String(err)
+      lastError = errorText(err)
     }
   }
   setStatus(db, 'nws', failures ? `${failures} of ${byPoint.size} requests failed: ${lastError}` : null)
@@ -240,7 +251,7 @@ export function startAlertPolling(open: () => Database) {
     const n = tick++
     for (const [name, poll] of POLLERS) {
       if (!poll.enabled() || n % poll.every !== 0) continue
-      await poll.run(db).catch((err) => console.error(`[alerts] ${name} poll failed:`, err instanceof Error ? err.message : err))
+      await poll.run(db).catch((err) => console.error(`[alerts] ${name} poll failed:`, errorText(err)))
     }
   }
   void run()

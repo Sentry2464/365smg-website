@@ -1,6 +1,6 @@
 import type { Database } from 'better-sqlite3'
 import type { Severity } from '@/components/portal/data'
-import { type FeedAlert, setStatus, syncSiteAlerts } from './alerts'
+import { errorText, type FeedAlert, setStatus, syncSiteAlerts, userAgent } from './alerts'
 
 // Orlando Police Department dispatched calls (active-calls XML, roughly the last hour).
 // Calls carry a block address or intersection but no coordinates, so block addresses are
@@ -94,7 +94,7 @@ async function geocode(db: Database, query: string, fetchImpl: typeof fetch, bud
   if (budget.left <= 0) return null
   budget.left--
   const url = `${CENSUS}?address=${encodeURIComponent(query)}&benchmark=Public_AR_Current&format=json`
-  const res = await fetchImpl(url, { signal: AbortSignal.timeout(10_000) })
+  const res = await fetchImpl(url, { headers: { 'User-Agent': userAgent() }, signal: AbortSignal.timeout(10_000) })
   if (!res.ok) throw new Error(`Census geocoder HTTP ${res.status}`)
   const json = (await res.json()) as { result?: { addressMatches?: { coordinates?: { x: number; y: number } }[] } }
   const c = json.result?.addressMatches?.[0]?.coordinates
@@ -109,11 +109,10 @@ async function geocode(db: Database, query: string, fetchImpl: typeof fetch, bud
 
 /** Fetches the active calls and links crime-related ones to nearby client sites. */
 export async function pollOpd(db: Database, fetchImpl: typeof fetch = fetch) {
-  const contact = process.env.SMG_API_CONTACT || 'admin@365securitymg.com'
   const radius = Number(process.env.SMG_CRIME_RADIUS_MI) || 1
   try {
     const res = await fetchImpl(OPD_FEED, {
-      headers: { 'User-Agent': `365SMG-ClientPortal (portal.365smg.com, ${contact})` },
+      headers: { 'User-Agent': userAgent() },
       signal: AbortSignal.timeout(15_000),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -154,7 +153,7 @@ export async function pollOpd(db: Database, fetchImpl: typeof fetch = fetch) {
     setStatus(db, 'opd', null)
     return { calls: calls.length, geocoded: GEOCODES_PER_RUN - budget.left }
   } catch (err) {
-    setStatus(db, 'opd', err instanceof Error ? err.message : String(err))
+    setStatus(db, 'opd', errorText(err))
     throw err
   }
 }

@@ -1,15 +1,12 @@
 import type { Database } from 'better-sqlite3'
 import type { Severity } from '@/components/portal/data'
-import { type FeedAlert, setStatus, syncSiteAlerts } from './alerts'
+import { errorText, type FeedAlert, setStatus, syncSiteAlerts, userAgent } from './alerts'
 
 // National public-safety feeds:
 // - DHS National Terrorism Advisory System (NTAS): an active advisory is shown to every
 //   client as an alert (national, so it applies to all sites).
 // - FBI Wanted (api.fbi.gov): the field office's current wanted list, shown as a list
 //   card. It has no locations, so it never goes on the map.
-
-const UA = () =>
-  `365SMG-ClientPortal (portal.365smg.com, ${process.env.SMG_API_CONTACT || 'admin@365securitymg.com'})`
 
 // ---------- DHS NTAS ----------
 
@@ -61,7 +58,7 @@ export function parseNtas(xml: string): FeedAlert[] {
 /** Links active NTAS advisories to every client site (and unlinks expired ones). */
 export async function pollNtas(db: Database, fetchImpl: typeof fetch = fetch) {
   try {
-    const res = await fetchImpl(NTAS_FEED, { headers: { 'User-Agent': UA() }, signal: AbortSignal.timeout(15_000) })
+    const res = await fetchImpl(NTAS_FEED, { headers: { 'User-Agent': userAgent() }, signal: AbortSignal.timeout(15_000) })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const items = parseNtas(await res.text())
     const sites = db.prepare(`SELECT id, client_id FROM sites`).all() as { id: string; client_id: string }[]
@@ -69,7 +66,7 @@ export async function pollNtas(db: Database, fetchImpl: typeof fetch = fetch) {
     setStatus(db, 'ntas', null)
     return { advisories: items.length }
   } catch (err) {
-    setStatus(db, 'ntas', err instanceof Error ? err.message : String(err))
+    setStatus(db, 'ntas', errorText(err))
     throw err
   }
 }
@@ -134,13 +131,13 @@ export async function pollWanted(db: Database, fetchImpl: typeof fetch = fetch) 
   for (const office of fieldOffices()) {
     try {
       const res = await fetchImpl(`${FBI}?field_offices=${office}&pageSize=50`, {
-        headers: { 'User-Agent': UA(), Accept: 'application/json' },
+        headers: { 'User-Agent': userAgent() },
         signal: AbortSignal.timeout(20_000),
       })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.headers.get('server') ?? ''}`.trim())
       save.run(`fbi-wanted:${office}`, JSON.stringify(parseWanted(await res.json())))
     } catch (err) {
-      errors.push(`${office}: ${err instanceof Error ? err.message : String(err)}`)
+      errors.push(`${office}: ${errorText(err)}`)
     }
   }
   setStatus(db, 'fbi-wanted', errors.length ? errors.join('; ') : null)

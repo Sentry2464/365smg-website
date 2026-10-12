@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import Image from 'next/image'
+import { contact } from '@/components/portal/data'
 
 export function AuthShell({ title, intro, children }: { title: string; intro?: ReactNode; children: ReactNode }) {
   return (
@@ -27,7 +28,7 @@ export function AuthShell({ title, intro, children }: { title: string; intro?: R
           {children}
         </section>
         <p className="cp-auth__help">
-          Need help signing in? Call the 24/7 operations line: <b>(407) 555-0365</b>
+          Need help signing in? Call the 24/7 operations line: <b>{contact.phone}</b>
         </p>
       </main>
     </div>

@@ -16,6 +16,7 @@ const LAYERS = {
   Fires: ['fire-perimeters'],
   Earthquakes: ['earthquakes'],
   Flights: ['flights'],
+  Cameras: ['cctv'],
 } as const
 type Layer = keyof typeof LAYERS
 
@@ -93,12 +94,15 @@ export function GlobeMap({
   url,
   alerts,
   storms,
+  localCameras,
 }: {
   siteId: SiteId
   url: string
   alerts: Alert[]
   /** NHC active storms; null when the list isn't available. */
   storms: Storm[] | null
+  /** True once God's Eye has public cameras near the client sites (SMG_GLOBE_LOCAL_CAMERAS=1). */
+  localCameras: boolean
 }) {
   const { sites } = usePortal()
   const frame = useRef<HTMLIFrameElement>(null)
@@ -117,6 +121,7 @@ export function GlobeMap({
     Fires: false,
     Earthquakes: true,
     Flights: false,
+    Cameras: false,
   })
   const layers = useMemo(
     () => ({ ...picked, Hurricanes: hurricanes ?? (atlantic && !dismissed) }),
@@ -238,7 +243,7 @@ export function GlobeMap({
           <iframe
             ref={frame}
             src={embedUrl.toString()}
-            title="Map of your sites with weather, fires, earthquakes and flights"
+            title="Map of your sites with weather, hurricanes, fires, earthquakes, flights and cameras"
             className="cp-globe__frame"
             allow="fullscreen"
             referrerPolicy="strict-origin"
@@ -258,8 +263,11 @@ export function GlobeMap({
             <i className="cp-legend__site" />
             Your sites
           </span>
-          <span className="cp-legend__hint">Radar: NOAA · Hurricanes: NHC · Quakes: USGS · Flights: adsb.lol</span>
+          <span className="cp-legend__hint">Radar: NOAA · Hurricanes: NHC · Quakes: USGS · Flights: adsb.lol · Cameras: public DOT feeds</span>
         </div>
+        {layers.Cameras && !localCameras && (
+          <p className="cp-meta cp-storms__note">No public cameras in this area yet.</p>
+        )}
         {layers.Hurricanes && <StormList storms={storms} sites={located} />}
       </div>
     </section>

@@ -62,6 +62,8 @@ export interface ClientPortalProps {
   globeUrl?: string
   /** NHC active tropical storms; null when the list isn't available. */
   storms?: Storm[] | null
+  /** God's Eye has public cameras near the client sites. */
+  localCameras?: boolean
   /** FBI Wanted lists for the portal's field office(s). */
   wanted?: WantedList[]
   /** FDLE missing persons alerts for the area. */
@@ -70,7 +72,7 @@ export interface ClientPortalProps {
   registry?: RegistryView | null
 }
 
-export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {}, globeUrl, storms = null, wanted = [], missing = null, registry = null }: ClientPortalProps) {
+export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {}, globeUrl, storms = null, localCameras = false, wanted = [], missing = null, registry = null }: ClientPortalProps) {
   // Last site this browser picked; ignored if it isn't one of this client's sites.
   const readSavedSite = useCallback((): SiteId | null => {
     try {
@@ -166,7 +168,7 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
 
           <div className="cp-dash">
             {globeUrl ? (
-              <GlobeMap siteId={siteId} url={globeUrl} alerts={feed.alerts} storms={storms} />
+              <GlobeMap siteId={siteId} url={globeUrl} alerts={feed.alerts} storms={storms} localCameras={localCameras} />
             ) : (
               <IntelMap siteId={siteId} incidents={feed.incidents} demo={feed.demo} />
             )}

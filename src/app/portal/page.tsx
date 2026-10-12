@@ -95,6 +95,7 @@ export default async function PortalPage({
       preview={preview}
       globeUrl={globeUrl()}
       storms={stormList(db())}
+      localCameras={process.env.SMG_GLOBE_LOCAL_CAMERAS === '1'}
       wanted={wantedList(db())}
       missing={missingList(db())}
       registry={registry}

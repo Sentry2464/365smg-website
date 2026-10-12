@@ -222,6 +222,11 @@ the site, police calls up to `SMG_CRIME_MAX_RADIUS_MI` (default 10; "at the site
 `SMG_CRIME_RADIUS_MI`, default 1), registry up to `SMG_REGISTRY_MAX_RADIUS_MI` (default 5;
 main radius `SMG_REGISTRY_RADIUS_MI`, default 1).
 
+**Intel map.** `SMG_GLOBE_URL` frames God's Eye View in the dashboard (unset: the static
+map). Its *Cameras* pill turns on God's Eye's public camera layer; until God's Eye has
+cameras near the client sites it also says "No public cameras in this area yet". Set
+`SMG_GLOBE_LOCAL_CAMERAS=1` once a Florida camera pack is loaded there.
+
 `SMG_API_CONTACT` is the contact sent to these services, as they ask. Feed health:
 `sudo -u smg sqlite3 /var/lib/smg/portal.db "select * from feed_status"`. After changing
 settings, `sudo systemctl restart smg-portal`.

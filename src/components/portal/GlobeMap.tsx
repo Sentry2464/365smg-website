@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { usePortal } from './context'
+import { distanceMi } from '@/lib/geo'
 import type { Storm } from '@/server/storms'
 import { ALL_SITES, type Alert, type Site, type SiteId } from './data'
 
@@ -60,13 +61,6 @@ function cameraWithStorms(sites: Located[], storms: Storm[]) {
   return { lat, lon, altitude_m, heading_deg: 0, pitch_deg: -85 }
 }
 
-/** Great-circle distance in miles. */
-function miles(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  const r = (x: number) => (x * Math.PI) / 180
-  const h =
-    Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2
-  return 2 * 3958.8 * Math.asin(Math.sqrt(h))
-}
 
 /** Alerts with their own location (police calls) as pins, worst first, one per place and title. */
 function incidentPins(alerts: Alert[]) {
@@ -250,7 +244,7 @@ export function GlobeMap({
             sandbox="allow-scripts allow-same-origin allow-popups"
             // gev:ready is sent once; if this component remounts after it, the globe's
             // listener is already up, so send the view shortly after load as well.
-            onLoad={() => setTimeout(send, 1500)}
+            onLoad={() => setTimeout(() => latestSend.current(), 1500)}
           />
           {!ready && (
             <p className="cp-globe__status" role="status">
@@ -282,7 +276,7 @@ function StormList({ storms, sites }: { storms: Storm[] | null; sites: Located[]
     <ul className="cp-storms" aria-label="Active tropical storms">
       {storms.map((s) => {
         const near = sites
-          .map((site) => ({ site, mi: miles(s, site) }))
+          .map((site) => ({ site, mi: distanceMi(s, site) }))
           .sort((a, b) => a.mi - b.mi)[0]
         return (
           <li key={s.id}>

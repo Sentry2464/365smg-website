@@ -66,12 +66,14 @@ function createSession(db: Database, userId: string, mfaPassed: boolean, meta: {
 }
 
 function recordFailure(db: Database, user: UserRow, action: string, ip?: string | null) {
-  const failures = user.failed_logins + 1
-  if (failures >= MAX_FAILURES) {
+  // Count in the database, not from the row read before the (async) password check, so
+  // parallel guesses each count.
+  const { failed_logins } = db
+    .prepare('UPDATE users SET failed_logins = failed_logins + 1 WHERE id = ? RETURNING failed_logins')
+    .get(user.id) as { failed_logins: number }
+  if (failed_logins >= MAX_FAILURES) {
     db.prepare('UPDATE users SET failed_logins = 0, locked_until = ? WHERE id = ?').run(minutesFromNow(LOCK_MINUTES), user.id)
     audit(db, { actorId: user.id, clientId: user.client_id, action: 'login.locked', ip })
-  } else {
-    db.prepare('UPDATE users SET failed_logins = ? WHERE id = ?').run(failures, user.id)
   }
   audit(db, { actorId: user.id, clientId: user.client_id, action, ip })
 }
@@ -94,8 +96,15 @@ export async function passwordLogin(
     audit(db, { action: 'login.unknown_email', ip: meta.ip, detail: { email: email.slice(0, 200) } })
     return generic
   }
-  if (isLocked(user)) return { ok: false, error: LOCKED_MESSAGE }
-  if (!(await verifyPassword(password, user.password_hash))) {
+  const passwordOk = await verifyPassword(password, user.password_hash)
+  // Re-read after the slow hash: a parallel attempt may have locked the account meanwhile.
+  // Only someone who knows the password learns that it's locked, so the message doesn't
+  // reveal which emails have accounts.
+  if (isLocked(getUser(db, user.id) ?? user)) {
+    audit(db, { actorId: user.id, clientId: user.client_id, action: 'login.while_locked', ip: meta.ip })
+    return passwordOk ? { ok: false, error: LOCKED_MESSAGE } : generic
+  }
+  if (!passwordOk) {
     recordFailure(db, user, 'login.bad_password', meta.ip)
     return generic
   }

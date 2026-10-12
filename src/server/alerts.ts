@@ -183,7 +183,7 @@ export function syncSiteAlerts(
   source: string,
   site: { id: string; client_id: string },
   items: FeedAlert[],
-  { keepMissing = false } = {},
+  { keepMissing = false, keepNearby = false } = {},
 ) {
   const upsert = db.prepare(
     `INSERT INTO alerts (id, source, event, severity, headline, url, area, starts_at, ends_at, lat, lng)
@@ -211,7 +211,7 @@ export function syncSiteAlerts(
     const current = db
       .prepare(
         `SELECT sa.alert_id FROM site_alerts sa JOIN alerts a ON a.id = sa.alert_id
-         WHERE sa.site_id = ? AND a.source = ?`,
+         WHERE sa.site_id = ? AND a.source = ?${keepNearby ? ' AND sa.distance_mi IS NULL' : ''}`,
       )
       .all(site.id, source) as { alert_id: string }[]
     const unlink = db.prepare(`DELETE FROM site_alerts WHERE alert_id = ? AND site_id = ?`)
@@ -250,12 +250,14 @@ export async function pollNws(db: Database, fetchImpl: typeof fetch = fetch) {
 
   // Statewide alerts, for "nearby" weather when nothing covers a site itself.
   let regional: FeedAlert[] = []
+  let regionalOk = false
   if (sites.length) {
     try {
       const area = process.env.SMG_NWS_AREA || 'FL'
       const res = await fetchImpl(`${NWS}/alerts/active?area=${area}`, { headers, signal: AbortSignal.timeout(20_000) })
       if (!res.ok) throw new Error(`HTTP ${res.status} for area ${area}`)
       regional = parseNws(await res.json()).filter((a) => a.polygons?.length)
+      regionalOk = true
     } catch (err) {
       failures++
       lastError = errorText(err)
@@ -275,7 +277,8 @@ export async function pollNws(db: Database, fetchImpl: typeof fetch = fetch) {
           const d = milesToArea(s, a.polygons!)
           return d > 0 && d <= nearMi ? [{ ...a, distanceMi: d, ...centreOf(a.polygons!) }] : []
         })
-        syncSiteAlerts(db, 'nws', s, [...items, ...nearby])
+        // Without the statewide list, keep the nearby alerts already shown.
+        syncSiteAlerts(db, 'nws', s, [...items, ...nearby], { keepNearby: !regionalOk })
       }
     } catch (err) {
       // Keep the last known alerts for these sites rather than clearing them on a failed request.
@@ -348,20 +351,41 @@ const POLLERS: [string, Poller][] = [
   ],
 ]
 
+// Feeds running right now, shared by the poller and admin actions (kept on globalThis
+// because Next.js can load this module more than once in one process).
+const running = ((globalThis as unknown as { smgFeedsRunning?: Map<string, Promise<void>> }).smgFeedsRunning ??=
+  new Map())
+
+/**
+ * Runs a feed unless it's already running, so a slow feed (the registry download) never
+ * overlaps itself. If it is running, returns that run, or with `again` (the input changed
+ * since it started) runs once more after it.
+ */
+export function runFeed(name: string, fn: () => Promise<unknown>, { again = false } = {}): Promise<void> {
+  const current = running.get(name)
+  if (current) return again ? current.then(() => runFeed(name, fn)) : current
+  const p = fn()
+    .then(() => undefined)
+    .catch((err) => console.error(`[alerts] ${name} poll failed:`, errorText(err)))
+    .finally(() => running.delete(name))
+  running.set(name, p)
+  return p
+}
+
 /** Starts polling every 5 minutes in this server process (once, however often it's called). */
 export function startAlertPolling(open: () => Database) {
   const g = globalThis as unknown as { smgAlertPoller?: ReturnType<typeof setInterval> }
   if (g.smgAlertPoller) return
   let tick = 0
-  const run = async () => {
+  // Feeds run side by side, so a slow one doesn't hold up the rest.
+  const run = () => {
     const db = open()
     const n = tick++
     for (const [name, poll] of POLLERS) {
-      if (!poll.enabled() || n % poll.every !== 0) continue
-      await poll.run(db).catch((err) => console.error(`[alerts] ${name} poll failed:`, errorText(err)))
+      if (poll.enabled() && n % poll.every === 0) void runFeed(name, () => poll.run(db))
     }
   }
-  void run()
+  run()
   g.smgAlertPoller = setInterval(run, 5 * 60_000)
   g.smgAlertPoller.unref?.()
 }

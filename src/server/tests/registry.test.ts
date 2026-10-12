@@ -111,4 +111,36 @@ describe('FDLE registry', () => {
     await pollRegistry(db, fakeFetch(csv).impl)
     expect((db.prepare('SELECT COUNT(*) AS n FROM registrants').get() as { n: number }).n).toBe(0)
   })
+
+  it('keeps going and keeps data when a lookup or download fails', async () => {
+    const admin = { id: 'system' }
+    const c = createClient(db, admin, { name: 'Two', industry: 'Office', industryPlural: '', managerEmail: '' })
+    createSite(db, admin, c.id, { name: 'Orlando', city: 'Orlando, FL', timeZone: '', lat: String(SITE.lat), lng: String(SITE.lng) })
+    createSite(db, admin, c.id, { name: 'Sanford', city: 'Sanford, FL', timeZone: '', lat: '28.8', lng: '-81.27' })
+    setRegistryEnabled(db, admin, c.id, true)
+    const csv = [HEADER, person('1', 'NEAR', 'Released - Subject to Registration', 'Predator', '100 MAIN ST')].join('\n')
+    const ok = fakeFetch(csv)
+    const counties = (async (url: string, init?: RequestInit) =>
+      url.includes('/geographies/coordinates')
+        ? Response.json({ result: { geographies: { Counties: [{ BASENAME: url.includes('y=28.8') ? 'Seminole' : 'Orange', STATE: '12' }] } } })
+        : ok.impl(url, init)) as unknown as typeof fetch
+    expect((await pollRegistry(db, counties)).errors).toEqual([])
+
+    // Census down for Sanford's lookup and FDLE failing for Orange: both errors are reported and
+    // neither county's data is dropped.
+    db.prepare(`DELETE FROM feed_cache WHERE key LIKE 'county:28.8%'`).run()
+    const flaky = (async (url: string, init?: RequestInit) => {
+      if (url.includes('/geographies/coordinates')) return new Response('busy', { status: 503 })
+      if (url.includes('county=Orange')) return new Response('busy', { status: 503 })
+      return counties(url, init)
+    }) as unknown as typeof fetch
+    const r = await pollRegistry(db, flaky)
+    expect(r.counties).toEqual(['Orange'])
+    expect(r.errors).toHaveLength(2)
+    expect((db.prepare('SELECT county FROM registry_imports ORDER BY county').all() as { county: string }[]).map((x) => x.county)).toEqual([
+      'Orange',
+      'Seminole',
+    ])
+    expect(registryNear(db, c.id)!.people.map((p) => p.id)).toEqual(['1'])
+  })
 })

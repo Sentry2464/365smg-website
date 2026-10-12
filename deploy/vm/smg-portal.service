@@ -10,6 +10,7 @@ Group=smg
 WorkingDirectory=/opt/smg-portal/current
 ExecStart=/usr/bin/node server.js
 Environment=NODE_ENV=production
+Environment=TZ=America/New_York
 Environment=PORT=3000
 # Localhost only: Cloudflare Tunnel is the sole way in.
 Environment=HOSTNAME=127.0.0.1

@@ -1,6 +1,6 @@
 import type { Database } from 'better-sqlite3'
 import { errorText, setStatus, userAgent } from './alerts'
-import { miles } from './opd'
+import { distanceMi } from '@/lib/geo'
 
 // FDLE Sexual Offender and Predator registry, from FDLE's public data file (per county,
 // automated extraction allowed by FDLE's public data file memo of 15 Aug 2025). Shown only
@@ -81,8 +81,12 @@ const FDLE_COUNTY: Record<string, string> = { 'St. Johns': 'Saint Johns', 'St. L
 
 async function countyOf(db: Database, lat: number, lng: number, fetchImpl: typeof fetch) {
   const key = `county:${lat.toFixed(4)},${lng.toFixed(4)}`
-  const hit = db.prepare(`SELECT json FROM feed_cache WHERE key = ?`).get(key) as { json: string } | undefined
-  if (hit) return JSON.parse(hit.json) as string | null
+  const hit = db.prepare(`SELECT json, fetched_at FROM feed_cache WHERE key = ?`).get(key) as
+    | { json: string; fetched_at: string }
+    | undefined
+  const county = hit ? (JSON.parse(hit.json) as string | null) : undefined
+  // "No Florida county" is rechecked daily, in case it came from a bad Census answer.
+  if (county || (county === null && Date.now() - Date.parse(hit!.fetched_at) < 86_400_000)) return county
   const url = `${CENSUS}/geographies/coordinates?x=${lng}&y=${lat}&benchmark=Public_AR_Current&vintage=Current_Current&layers=Counties&format=json`
   const res = await fetchImpl(url, { headers: { 'User-Agent': userAgent() }, signal: AbortSignal.timeout(15_000) })
   if (!res.ok) throw new Error(`Census county lookup HTTP ${res.status}`)
@@ -93,6 +97,8 @@ async function countyOf(db: Database, lat: number, lng: number, fetchImpl: typeo
   return name
 }
 
+/** Counties of opted-in clients' sites. `complete` is false if a lookup failed. */
+
 async function neededCounties(db: Database, fetchImpl: typeof fetch) {
   const sites = db
     .prepare(
@@ -101,11 +107,16 @@ async function neededCounties(db: Database, fetchImpl: typeof fetch) {
     )
     .all() as { lat: number; lng: number }[]
   const counties = new Set<string>()
+  const errors: string[] = []
   for (const s of sites) {
-    const c = await countyOf(db, s.lat, s.lng, fetchImpl)
-    if (c) counties.add(c)
+    try {
+      const c = await countyOf(db, s.lat, s.lng, fetchImpl)
+      if (c) counties.add(c)
+    } catch (err) {
+      errors.push(errorText(err))
+    }
   }
-  return counties
+  return { counties, errors }
 }
 
 // ---------- geocoding (Census batch geocoder, cached) ----------
@@ -197,26 +208,30 @@ export async function importCounty(
 /** Downloads the county files needed by opted-in clients; drops counties no longer needed. */
 export async function pollRegistry(db: Database, fetchImpl: typeof fetch = fetch) {
   const email = process.env.SMG_API_CONTACT || 'admin@365securitymg.com'
-  try {
-    const counties = await neededCounties(db, fetchImpl)
+  const { counties, errors } = await neededCounties(db, fetchImpl)
+  // Drop counties no longer needed, but only when every site's county is known: a failed
+  // lookup mustn't remove a county still in use.
+  if (errors.length === 0) {
     for (const { county } of db.prepare(`SELECT county FROM registry_imports`).all() as { county: string }[]) {
       if (!counties.has(county)) {
         db.prepare(`DELETE FROM registrants WHERE county = ?`).run(county)
         db.prepare(`DELETE FROM registry_imports WHERE county = ?`).run(county)
       }
     }
-    for (const county of counties) {
+  }
+  // One county failing doesn't stop the others; its previous import stays.
+  for (const county of counties) {
+    try {
       const url = `${FDLE}?email=${encodeURIComponent(email)}&county=${encodeURIComponent(county)}&mode=auto`
       const res = await fetchImpl(url, { headers: { 'User-Agent': userAgent() }, signal: AbortSignal.timeout(120_000) })
-      if (!res.ok) throw new Error(`FDLE ${county}: HTTP ${res.status}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       await importCounty(db, county, parseCsv(await res.text()), fetchImpl)
+    } catch (err) {
+      errors.push(`FDLE ${county}: ${errorText(err)}`)
     }
-    setStatus(db, 'fdle-registry', null)
-    return { counties: [...counties] }
-  } catch (err) {
-    setStatus(db, 'fdle-registry', errorText(err))
-    throw err
   }
+  setStatus(db, 'fdle-registry', errors.length ? errors.join('; ') : null)
+  return { counties: [...counties], errors }
 }
 
 // ---------- reading, per client ----------
@@ -269,7 +284,7 @@ export function registryNear(db: Database, clientId: string): RegistryView | nul
       lng: number
     }[]
     for (const row of rows) {
-      const d = miles(s, row)
+      const d = distanceMi(s, row)
       if (d > maxRadiusMi) continue
       const r = JSON.parse(row.json) as Record<string, string>
       if (EXCLUDED_STATUS.test(r.STATUS ?? '')) continue

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { daysBetween, formatDay, isDay, todayEt } from '@/server/dates'
 import { db } from '@/server/db'
 import { requireUser } from '@/server/session'
 import { listClients, listUsers } from '@/server/store'
@@ -15,16 +16,15 @@ const roleLabel = { admin: 'Admin', investigator: 'Investigator', client: 'Clien
 
 /** Warns 30 days before the Microsoft 365 mail secret (MS_CLIENT_SECRET_EXPIRES) runs out. */
 function mailSecretWarning() {
-  const raw = process.env.MS_CLIENT_SECRET_EXPIRES
-  if (!raw || process.env.SMG_MAIL_PROVIDER !== 'graph') return null
-  const expires = new Date(raw)
-  if (Number.isNaN(expires.getTime())) return null
-  const days = Math.ceil((expires.getTime() - Date.now()) / 86_400_000)
+  // A date (YYYY-MM-DD) as Entra shows it; the secret works through that day.
+  const raw = process.env.MS_CLIENT_SECRET_EXPIRES?.trim().slice(0, 10)
+  if (!raw || !isDay(raw) || process.env.SMG_MAIL_PROVIDER !== 'graph') return null
+  const days = daysBetween(todayEt(), raw)
   if (days > 30) return null
-  const when = expires.toLocaleDateString('en-US', { dateStyle: 'long', timeZone: 'America/New_York' })
-  return days <= 0
+  const when = formatDay(raw, { dateStyle: 'long' })
+  return days < 0
     ? `The Microsoft 365 mail secret expired on ${when}. Portal emails are not being sent until a new secret is set on the server.`
-    : `The Microsoft 365 mail secret expires on ${when} (in ${days} day${days === 1 ? '' : 's'}). Create a new one in Entra and update MS_CLIENT_SECRET and MS_CLIENT_SECRET_EXPIRES on the server.`
+    : `The Microsoft 365 mail secret expires on ${when} (${days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`}). Create a new one in Entra and update MS_CLIENT_SECRET and MS_CLIENT_SECRET_EXPIRES on the server.`
 }
 
 export default async function AdminHome() {

@@ -1,5 +1,6 @@
 import type { Database } from 'better-sqlite3'
 import { audit, hashPassword, newId, temporaryPassword } from './core.mjs'
+import { addBusinessDays, todayEt } from './dates'
 
 export type Role = 'admin' | 'investigator' | 'client'
 
@@ -89,15 +90,6 @@ export function slugify(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'site'
 }
 
-function addBusinessDays(from: Date, days: number) {
-  const d = new Date(from)
-  while (days > 0) {
-    d.setDate(d.getDate() + 1)
-    if (d.getDay() !== 0 && d.getDay() !== 6) days--
-  }
-  return d
-}
-
 // ---------------------------------------------------------------------------
 // Users (shared by login and admin)
 
@@ -142,7 +134,7 @@ export function clientScope(db: Database, clientId: string) {
       if (!FEEDBACK_TOPICS.includes(topic)) throw new ValidationError('Choose a topic.')
       if (!message) throw new ValidationError('Write a short message so your account team knows how to help.')
       if (siteId && !this.site(siteId)) throw new ValidationError('Choose one of your sites.')
-      const replyBy = addBusinessDays(new Date(), replyBusinessDays).toISOString().slice(0, 10)
+      const replyBy = addBusinessDays(todayEt(), replyBusinessDays)
       const row = {
         id: newId(),
         client_id: clientId,
@@ -397,9 +389,6 @@ export function listAllInvestigations(db: Database, actor: Actor) {
     )
     .all() as (InvestigationRow & { client_name: string; user_name: string; user_email: string })[]
 }
-
-export const countOpenInvestigations = (db: Database) =>
-  (db.prepare("SELECT COUNT(*) AS n FROM investigations WHERE status != 'closed'").get() as { n: number }).n
 
 export const recentAudit = (db: Database, limit = 100) =>
   db

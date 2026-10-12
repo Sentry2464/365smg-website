@@ -1,5 +1,6 @@
 import type { Database } from 'better-sqlite3'
 import type { Severity } from '@/components/portal/data'
+import { distanceMi } from '@/lib/geo'
 import { errorText, type FeedAlert, maxCrimeRadius, setStatus, syncSiteAlerts, userAgent } from './alerts'
 
 // Orlando Police Department dispatched calls (active-calls XML, roughly the last hour).
@@ -80,13 +81,6 @@ export function geocodeQuery(location: string) {
 const titleCase = (s: string) => s.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase())
 
 /** Great-circle distance in miles. */
-export function miles(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  const r = (x: number) => (x * Math.PI) / 180
-  const h =
-    Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2
-  return 2 * 3958.8 * Math.asin(Math.sqrt(h))
-}
-
 async function geocode(db: Database, query: string, fetchImpl: typeof fetch, budget: { left: number }) {
   const hit = db.prepare(`SELECT lat, lng FROM geocode_cache WHERE query = ?`).get(query) as
     | { lat: number | null; lng: number | null }
@@ -133,7 +127,7 @@ export async function pollOpd(db: Database, fetchImpl: typeof fetch = fetch) {
       if (!point) continue
       const ends = new Date(new Date(call.date).getTime() + KEEP_HOURS * 3_600_000).toISOString()
       for (const s of sites) {
-        const d = miles(s, point)
+        const d = distanceMi(s, point)
         if (d > radius) continue
         perSite.get(s.id)!.push({
           id: `opd:${call.incident}`,

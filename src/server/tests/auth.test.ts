@@ -67,6 +67,15 @@ describe('login', () => {
     const locked = await passwordLogin(db, 'pat@acme.test', temporaryPassword)
     expect(locked.ok).toBe(false)
     expect((locked as { error: string }).error).toMatch(/Too many attempts/)
+    // A wrong password on a locked account looks like any other wrong password.
+    expect(await passwordLogin(db, 'pat@acme.test', 'x')).toEqual(unknown)
+  })
+
+  it('counts parallel wrong passwords, so they can’t get around the lockout', async () => {
+    const { temporaryPassword } = await newClientUser()
+    await Promise.all(Array.from({ length: 5 }, () => passwordLogin(db, 'pat@acme.test', 'x')))
+    const after = await passwordLogin(db, 'pat@acme.test', temporaryPassword)
+    expect((after as { error: string }).error).toMatch(/Too many attempts/)
   })
 
   it('ends sessions when a user is disabled or their authenticator is reset', async () => {

@@ -173,6 +173,12 @@ describe('nearby tier', () => {
     expect(feed.alerts[0].distanceMi).toBeCloseTo(11, 0)
     expect(feed.summaries[site.id]).toEqual({ threatLevel: 'LOW', activeAlertId: null })
     expect(feed.incidents).toEqual([])
+
+    // The statewide request fails next time: the nearby warning stays.
+    const regionalDown = (async (url: string) =>
+      url.includes('area=FL') ? new Response('busy', { status: 503 }) : Response.json(nwsResponse())) as unknown as typeof fetch
+    await pollNws(db, regionalDown)
+    expect(liveFeed([toSite(site)], clientAlerts(db, c.id)).alerts).toHaveLength(1)
   })
 
   it('hides nearby items once something is at the site', () => {
@@ -183,5 +189,29 @@ describe('nearby tier', () => {
     syncSiteAlerts(db, 'nws', site, [here, { ...far, distanceMi: 12 }])
     const feed = liveFeed([toSite(site)], clientAlerts(db, c.id))
     expect(feed.alerts.map((a) => [a.title.split(' ')[0], !!a.nearby])).toEqual([['Heat', false]])
+  })
+})
+
+describe('feed runs', () => {
+  it('never overlaps a feed with itself, and can queue one more run', async () => {
+    const { runFeed } = await import('../alerts')
+    let active = 0
+    let max = 0
+    let runs = 0
+    const slow = async () => {
+      runs++
+      max = Math.max(max, ++active)
+      await new Promise((r) => setTimeout(r, 20))
+      active--
+    }
+    await Promise.all([runFeed('t', slow), runFeed('t', slow), runFeed('t', slow, { again: true })])
+    expect(max).toBe(1)
+    expect(runs).toBe(2)
+    // A failing run is logged, not thrown, and frees the slot.
+    await runFeed('t', async () => {
+      throw new Error('down')
+    })
+    await runFeed('t', slow)
+    expect(runs).toBe(3)
   })
 })

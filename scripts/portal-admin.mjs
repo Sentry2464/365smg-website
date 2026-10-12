@@ -60,8 +60,11 @@ async function addUser({ email, name, role, clientId = null, password }) {
 }
 
 if (command === 'create-staff') {
-  const { email, name, role } = values
-  if (!email || !name || !['admin', 'investigator'].includes(role)) {
+  // Same rules as Portal admin (store.ts createUser).
+  const email = (values.email ?? '').trim().toLowerCase()
+  const name = (values.name ?? '').trim()
+  const { role } = values
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || !name || !['admin', 'investigator'].includes(role)) {
     console.error('usage: create-staff --email you@365securitymg.com --name "Your Name" [--role admin|investigator]')
     process.exit(2)
   }

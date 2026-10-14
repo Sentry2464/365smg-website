@@ -1879,6 +1879,66 @@ textarea.cp-input {
 .cp-globe {
   background: var(--navy);
 }
+/* The live globe: taller than the old static map, and a full-screen mode. */
+.cp-map--globe .cp-map__canvas {
+  height: clamp(460px, 68vh, 820px);
+}
+.cp-map__full {
+  flex: none;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid var(--pill-line);
+  color: var(--ink);
+  background: var(--card);
+  white-space: nowrap;
+}
+.cp-map__full[aria-pressed='true'] {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.cp-map--full {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  margin: 0;
+  max-width: none;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cp-map--full .cp-map__body {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+}
+.cp-map--full .cp-map__canvas {
+  flex: 1;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+}
+.cp-map--full .cp-legend,
+.cp-map--full .cp-storms,
+.cp-map--full .cp-storms__note {
+  display: none;
+}
+@media (max-width: 699px) {
+  .cp-map--globe .cp-map__canvas {
+    height: 300px;
+  }
+  .cp-map--full .cp-map__canvas {
+    height: auto;
+  }
+  .cp-map__full {
+    min-height: 44px;
+    padding: 0 16px;
+    margin-left: auto;
+  }
+}
 .cp-globe__frame {
   position: absolute;
   inset: 0;

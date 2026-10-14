@@ -107,6 +107,21 @@ export function GlobeMap({
   const retry = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [ready, setReady] = useState(false)
   const [failed, setFailed] = useState(false)
+  // Full screen: the map fills the window (phones too, where the browser's own full screen
+  // isn't available for frames); Esc or Close returns, and the page doesn't scroll behind it.
+  const [full, setFull] = useState(false)
+  useEffect(() => {
+    if (!full) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setFull(false)
+    const root = document.documentElement
+    const before = root.style.overflow
+    root.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      root.style.overflow = before
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [full])
   // Hurricanes starts on while an Atlantic storm is active, unless turned off this session.
   const atlantic = !!storms?.some((s) => s.basin === 'AL')
   const dismissed = useSyncExternalStore(noSubscribe, readHurricanesOff, () => false)
@@ -214,7 +229,14 @@ export function GlobeMap({
   embedUrl.searchParams.set('embed', '1')
 
   return (
-    <section id="intel-map" tabIndex={-1} className="cp-card cp-map cp-area-map cp-anchor" aria-labelledby="cp-map-title">
+    <section
+      id="intel-map"
+      tabIndex={-1}
+      className={`cp-card cp-map cp-map--globe cp-area-map cp-anchor${full ? ' cp-map--full' : ''}`}
+      aria-labelledby="cp-map-title"
+      role={full ? 'dialog' : undefined}
+      aria-modal={full || undefined}
+    >
       <div className="cp-map__head">
         <h2 id="cp-map-title" className="cp-card__title">
           Intel map
@@ -232,6 +254,15 @@ export function GlobeMap({
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          className="cp-map__full"
+          aria-pressed={full}
+          aria-label={full ? 'Close full-screen map' : 'Show the map full screen'}
+          onClick={() => setFull((f) => !f)}
+        >
+          {full ? '✕ Close' : '⤢ Full screen'}
+        </button>
       </div>
       <div className="cp-map__body">
         <div className="cp-map__canvas cp-globe">

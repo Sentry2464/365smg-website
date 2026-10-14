@@ -9,6 +9,7 @@
 //
 //   GET /fdot/cameras.json   the camera pack God's Eye loads (see README.md)
 //   GET /fdot/snap/<id>      the camera's current still (JPEG)
+//   GET /fdot/video/<id>     the camera's live stream address, for live-relay.mjs (JSON)
 //   GET /healthz             "ok"
 //
 // Node built-ins only. The FL511 list query and WKT parsing follow OSIRIS
@@ -116,7 +117,25 @@ export function toCamera(rec) {
   }
   // Only ever fetch from FDOT's own host.
   if (new URL(imageUrl).origin !== new URL(FDOT_BASE).origin) return null
-  return { id: `fdot-${rec.id}`, name, city, lat: pos.lat, lng: pos.lng, heading: headingFrom(direction, location, img.description), imageUrl }
+  // The camera's live stream (HLS), as FDOT lists it, for the live relay (live-relay.mjs).
+  let videoUrl = null
+  try {
+    const v = img.videoUrl && !img.videoDisabled ? new URL(img.videoUrl, `${FDOT_BASE}/`) : null
+    if (v && /^https?:$/.test(v.protocol)) videoUrl = v.toString()
+  } catch {
+    // no usable stream address
+  }
+  return {
+    id: `fdot-${rec.id}`,
+    name,
+    city,
+    lat: pos.lat,
+    lng: pos.lng,
+    heading: headingFrom(direction, location, img.description),
+    imageUrl,
+    videoUrl,
+    videoAuth: !!img.isVideoAuthRequired,
+  }
 }
 
 async function fetchPage(start) {
@@ -297,6 +316,15 @@ const server = http.createServer(async (req, res) => {
       'Content-Type': 'application/json',
       'Cache-Control': 'max-age=300',
     })
+  }
+
+  // For the live relay on this VM: the stream address FDOT lists for one camera.
+  const v = /^\/fdot\/video\/(fdot-\d+)$/.exec(path)
+  if (v) {
+    const cam = cameras.get(v[1])
+    if (!cam) return send(res, 404, 'not an FDOT camera')
+    const { id, name, city, videoUrl = null, videoAuth = false } = cam
+    return send(res, 200, JSON.stringify({ id, name, city, videoUrl, videoAuth }), { 'Content-Type': 'application/json' })
   }
 
   const m = /^\/fdot\/snap\/(fdot-\d+)$/.exec(path)

@@ -13,6 +13,7 @@ agreed with FDOT:
 God's Eye (127.0.0.1:4173) ──► fdot-cameras (127.0.0.1:4185) ──► fl511.com
      GET /fdot/cameras.json   the camera pack, in God's Eye's CCTV source format
      GET /fdot/snap/<id>      a camera's current still
+     GET /fdot/video/<id>     a camera's live stream address, for live-relay.mjs (VIDEO.md)
      GET /healthz             "ok"
 ```
 

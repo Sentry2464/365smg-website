@@ -1,0 +1,41 @@
+[Unit]
+Description=Live FDOT video through Cloudflare Stream (365 SMG)
+After=network-online.target fdot-cameras.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Its own system user: the state folder holds the Stream signing key and stream keys.
+User=fdotlive
+Group=fdotlive
+StateDirectory=fdot-live
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/usr/bin/node /opt/fdot-cameras/live-relay.mjs
+Environment=LIVE_LISTEN=127.0.0.1
+Environment=LIVE_PORT=4186
+Environment=LIVE_STATE_DIR=/var/lib/fdot-live
+Environment=FDOT_SIDECAR=http://127.0.0.1:4185
+# The Cloudflare settings and limits (root:root, chmod 600). See fdot-live.env.example.
+EnvironmentFile=/etc/fdot-live.env
+Restart=on-failure
+RestartSec=5
+SuccessExitStatus=143
+# Stop ffmpeg with the service.
+KillMode=control-group
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

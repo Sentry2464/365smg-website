@@ -200,6 +200,59 @@ describe('globe gate behind Cloudflare (default)', () => {
   })
 })
 
+describe('live video through Cloudflare Stream', () => {
+  it('serves the player page and passes start/status/stop to the relay with the client id', async () => {
+    const relayed: { method: string; url: string; cid?: string }[] = []
+    const relay = http.createServer((req, res) => {
+      relayed.push({ method: req.method!, url: req.url!, cid: req.headers['x-smg-cid'] as string })
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify({ ok: true }))
+    })
+    await new Promise<void>((r) => relay.listen(0, '127.0.0.1', r))
+    const { child, base: g } = await startGate({ GATE_LIVE_RELAY: `http://127.0.0.1:${(relay.address() as AddressInfo).port}` })
+    try {
+      const host = new URL(g).host
+      const at = (p: string, init: RequestInit = {}) => fetch(g + p, { redirect: 'manual', ...init })
+      expect((await at('/live/fdot-1')).status).toBe(403) // no cookie
+      const cookie = cookieOf(await at(`/?t=${globeTicket(SECRET, 'client-live')}`, { headers: { 'cf-connecting-ip': '192.0.2.20' } }))!
+      const page = await at('/live/fdot-1', { headers: { cookie } })
+      expect(page.status).toBe(200)
+      const csp = page.headers.get('content-security-policy')!
+      expect(csp).toContain('frame-src https://*.cloudflarestream.com')
+      expect(csp).toContain("frame-ancestors 'none'")
+      expect(csp).toMatch(/script-src 'nonce-[\w+/=]+'/)
+      expect(await page.text()).toContain('data-cam="fdot-1"')
+
+      const post = (p: string, origin?: string) =>
+        at(p, { method: 'POST', headers: { cookie, ...(origin ? { origin } : {}) } })
+      expect((await post('/live/fdot-1/start', `http://${host}`)).status).toBe(200)
+      expect((await at('/live/fdot-1/status', { headers: { cookie } })).status).toBe(200)
+      expect((await post('/live/fdot-1/stop', `http://${host}`)).status).toBe(200)
+      expect((await post('/live/fdot-1/start', 'https://evil.example')).status).toBe(403) // another site
+      expect((await post('/live/fdot-1/start')).status).toBe(403) // no Origin
+      expect((await at('/live/fdot-1/start', { headers: { cookie } })).status).toBe(405) // GET
+      expect((await at('/live/..%2Fadmin', { headers: { cookie } })).status).toBe(404)
+      expect(relayed).toEqual([
+        { method: 'POST', url: '/live/fdot-1/start', cid: 'client-live' },
+        { method: 'GET', url: '/live/fdot-1/status', cid: 'client-live' },
+        { method: 'POST', url: '/live/fdot-1/stop', cid: 'client-live' },
+      ])
+      // A client can't name another client: the id comes only from the gate's cookie.
+      await at('/live/fdot-1/status', { headers: { cookie, 'x-smg-cid': 'someone-else' } })
+      expect(relayed.at(-1)!.cid).toBe('client-live')
+    } finally {
+      child.kill()
+      relay.close()
+    }
+  })
+
+  it('has no /live/ pages unless the relay is configured', async () => {
+    const c = cookieOf(await get(`/?t=${globeTicket(SECRET, 'client-nolive')}`, { 'cf-connecting-ip': '192.0.2.30' }))!
+    // The main test gate has GATE_LIVE_RELAY unset.
+    expect((await get('/live/fdot-1', { cookie: c })).status).toBe(404)
+  })
+})
+
 describe('portal globe URL', () => {
   it('adds a ticket, and never frames a public globe without a secret', () => {
     const saved = { ...process.env }

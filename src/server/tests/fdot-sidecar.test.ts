@@ -16,7 +16,11 @@ const rows = Array.from({ length: 150 }, (_, i) => ({
   city: i < 100 ? 'Orlando' : 'Tampa',
   county: i < 100 ? 'Orange' : 'Hillsborough',
   latLng: { geography: { wellKnownText: `POINT (-81.${String(i).padStart(3, '0')} 28.5)` } },
-  images: [{ imageUrl: `/map/Cctv/${1000 + i}` }],
+  images: [
+    i === 1
+      ? { imageUrl: `/map/Cctv/${1000 + i}`, videoUrl: 'https://video.example/1001/playlist.m3u8', isVideoAuthRequired: true }
+      : { imageUrl: `/map/Cctv/${1000 + i}` },
+  ],
 }))
 rows.push({ ...rows[0], id: 9, latLng: { geography: { wellKnownText: 'POINT (-74 40.7)' } }, images: [{ imageUrl: '/map/Cctv/9' }] }) // New York: dropped
 rows.push({ ...rows[0], id: 10, images: [{ imageUrl: 'https://evil.example/x.jpg' }] }) // off-site still: dropped
@@ -111,6 +115,20 @@ describe('FDOT camera sidecar', () => {
     expect(all[0].headers.get('content-type')).toBe('image/jpeg')
     await fetch(`${base}/fdot/snap/fdot-1001`)
     expect(seen.filter((s) => s.path === '/map/Cctv/1001')).toHaveLength(1)
+  })
+
+  it('tells the live relay each camera’s stream address, and keeps it out of the pack', async () => {
+    expect(await (await fetch(`${base}/fdot/video/fdot-1001`)).json()).toEqual({
+      id: 'fdot-1001',
+      name: 'I-4 at Exit 1',
+      city: 'Orlando',
+      videoUrl: 'https://video.example/1001/playlist.m3u8',
+      videoAuth: true,
+    })
+    expect((await (await fetch(`${base}/fdot/video/fdot-1000`)).json()).videoUrl).toBeNull()
+    expect((await fetch(`${base}/fdot/video/fdot-1120`)).status).toBe(404)
+    const pack = await (await fetch(`${base}/fdot/cameras.json`)).text()
+    expect(pack).not.toContain('video.example')
   })
 
   it('only serves cameras in FDOT’s list', async () => {

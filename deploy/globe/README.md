@@ -18,9 +18,12 @@ browser ──► Cloudflare ──► cloudflared (VM 151) ──► gate 127.0
 3. Every other request needs the cookie. With it, the request goes to God's Eye with
    Cloudflare and forwarding headers removed and `Host: localhost:<port>`, streamed (tiles)
    and with WebSockets passed through. Without it: a short 403 page.
-4. Live camera video (`/api/cctv/stream|media/…`) is refused with 403 (`GATE_LIVE_VIDEO=0`,
-   the default). Cloudflare doesn't allow video through a Tunnel public hostname on our plan,
-   so clients use the camera panel's "Watch live on FL511" link. See `fdot/VIDEO.md`.
+4. God's Eye's own live camera video (`/api/cctv/stream|media/…`) is refused with 403
+   (`GATE_LIVE_VIDEO=0`, the default): Cloudflare doesn't allow video through a Tunnel public
+   hostname on our plan.
+5. With `GATE_LIVE_RELAY` set, `/live/<camera>` is the Cloudflare Stream player page, and
+   `/live/<camera>/start|status|stop` go to the live relay with the signed-in client's id
+   (POSTs only from this site). The video comes from Cloudflare Stream. See `fdot/VIDEO.md`.
 
 `/healthz` answers `ok` without a cookie. Ticket checks are rate-limited (30 a minute per
 client IP, 600 in total). Spent tickets are remembered in memory until they expire; a gate

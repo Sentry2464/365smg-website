@@ -10,6 +10,7 @@
 //      127.0.0.1:4173), streamed, WebSockets included. Without it: 403.
 //
 // GET /healthz answers "ok" without a cookie (no details).
+// /live/<camera> (with GATE_LIVE_RELAY): the Cloudflare Stream player page, see fdot/VIDEO.md.
 // Node built-ins only. Settings come from the environment (see gev-gate.env.example).
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
@@ -40,6 +41,12 @@ const TICKETS_PER_MINUTE_ALL = Number(env('GATE_TICKETS_PER_MINUTE_ALL', '600'))
 // and clients use the camera panel's "Watch live on FL511" link instead. Only set this to 1
 // where the gate is not behind a Cloudflare public hostname (e.g. office network or VPN).
 const LIVE_VIDEO = env('GATE_LIVE_VIDEO', '0') === '1'
+// Live video through Cloudflare Stream instead (fdot/live-relay.mjs on this VM): the gate
+// serves a small player page at /live/<camera> and passes start/status/stop to the relay
+// with the signed-in client's id. The video itself comes from Cloudflare Stream, not here.
+// Empty: /live/ answers 404.
+const LIVE_RELAY = env('GATE_LIVE_RELAY', '') ? new URL(env('GATE_LIVE_RELAY', '')) : null
+const FL511_URL = env('GATE_FL511_URL', 'https://fl511.com/cctv')
 // Live camera video, when on: how many cameras one client may stream at once (0 = no limit),
 // which requests count as streaming (path regex; the first group is the camera id), and how
 // long a stream counts as open after its last request (God's Eye drops idle streams after 15 s).
@@ -213,6 +220,154 @@ function deny(res, status, text) {
 <p>${text}</p></body>`)
 }
 
+// ---------- live video player (Cloudflare Stream) ----------
+
+const LIVE_PATH = /^\/live\/(fdot-\d{1,12})(?:\/(start|status|stop))?$/
+
+function livePage(res, camera) {
+  const nonce = randomBytes(16).toString('base64')
+  res.writeHead(200, {
+    'Content-Security-Policy': [
+      "default-src 'none'",
+      `script-src 'nonce-${nonce}'`,
+      "style-src 'unsafe-inline'",
+      "img-src 'self'",
+      "connect-src 'self'",
+      'frame-src https://*.cloudflarestream.com',
+      "frame-ancestors 'none'",
+      "base-uri 'none'",
+      "form-action 'none'",
+    ].join('; '),
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+    'Cache-Control': 'no-store',
+    'Content-Type': 'text/html; charset=utf-8',
+  })
+  res.end(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live camera · 365 SMG</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; min-height: 100vh; background: #12122B; color: #D0D4DC; font: 15px/1.4 system-ui, sans-serif; display: flex; flex-direction: column; }
+  header { padding: 12px 16px; display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  h1 { font-size: 16px; margin: 0; color: #fff; }
+  #clock { font-variant-numeric: tabular-nums; color: #7fd3ff; }
+  main { flex: 1; display: grid; place-items: center; padding: 0 16px; }
+  .screen { position: relative; width: min(100%, 960px); aspect-ratio: 16 / 9; background: #000; border-radius: 8px; overflow: hidden; }
+  .screen img, .screen iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; object-fit: contain; }
+  #note { position: absolute; inset: auto 0 0 0; padding: 12px 16px; background: rgba(18, 18, 43, .85); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  #note[hidden] { display: none; }
+  button { font: inherit; font-weight: 600; padding: 8px 16px; border-radius: 6px; border: 0; background: #7fd3ff; color: #12122B; cursor: pointer; }
+  button[hidden] { display: none; }
+  footer { padding: 12px 16px; font-size: 13px; color: #9aa0ad; }
+  a { color: #7fd3ff; }
+</style></head>
+<body data-cam="${camera}">
+<header><h1 id="name">Live camera</h1><span id="clock"></span></header>
+<main><div class="screen">
+  <img id="still" alt="Latest still image from the camera" src="/api/cctv/frame/${camera}">
+  <div id="note"><span id="msg">Connecting live…</span><button id="go" type="button" hidden>Watch live</button></div>
+</div></main>
+<footer>Live video from FDOT, up to 5 minutes at a time, one camera at a time per account.
+Also on <a href="${FL511_URL}" target="_blank" rel="noopener noreferrer">FL511</a>.</footer>
+<script nonce="${nonce}">
+(() => {
+  const cam = document.body.dataset.cam
+  const $ = (id) => document.getElementById(id)
+  const screen = document.querySelector('.screen')
+  let frame = null, tick = null, ends = 0, run = 0, leased = false
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+  const note = (text, button) => {
+    $('note').hidden = !text
+    $('msg').textContent = text || ''
+    $('go').hidden = !button
+    if (button) $('go').textContent = button
+  }
+  const release = () => navigator.sendBeacon('/live/' + cam + '/stop')
+  function stopPlayer() {
+    run++
+    clearInterval(tick)
+    $('clock').textContent = ''
+    if (frame) { frame.remove(); frame = null }
+    if (leased) { leased = false; release() }
+  }
+  async function start() {
+    stopPlayer()
+    const mine = run
+    note('Connecting live… this takes about 15 seconds.')
+    let d = {}
+    try {
+      const r = await fetch('/live/' + cam + '/start', { method: 'POST' })
+      d = await r.json()
+      if (!r.ok) return note(d.message || 'Live video couldn’t start.', r.status >= 500 || d.error === 'one_camera' ? 'Try again' : '')
+    } catch { return note('Live video couldn’t start.', 'Try again') }
+    leased = true
+    if (d.name) { $('name').textContent = d.name + (d.city ? ' · ' + d.city : ''); document.title = d.name + ' · Live' }
+    ends = Date.now() + d.sessionSeconds * 1000
+    for (const t0 = Date.now(); Date.now() - t0 < 45000; await sleep(2000)) {
+      if (mine !== run) return
+      try { if ((await (await fetch('/live/' + cam + '/status')).json()).live) break } catch {}
+    }
+    if (mine !== run) return
+    frame = document.createElement('iframe')
+    frame.src = d.iframeUrl
+    frame.allow = 'autoplay; fullscreen; picture-in-picture'
+    frame.title = 'Live camera video'
+    screen.insertBefore(frame, $('note'))
+    note('')
+    const show = () => {
+      const left = Math.max(0, Math.round((ends - Date.now()) / 1000))
+      $('clock').textContent = 'Live · ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + ' left'
+      if (left === 0) { stopPlayer(); note('Live sessions last up to 5 minutes.', 'Still watching?') }
+    }
+    show()
+    tick = setInterval(show, 1000)
+  }
+  $('go').addEventListener('click', start)
+  // Hidden tab: stop (and stop paying); coming back needs a click.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && leased) { stopPlayer(); note('Paused while this tab was hidden.', 'Resume') }
+  })
+  addEventListener('pagehide', stopPlayer)
+  start()
+})()
+</script></body></html>`)
+}
+
+function liveRelay(req, res, cid, camera, action) {
+  const up = http.request(
+    {
+      host: LIVE_RELAY.hostname,
+      port: LIVE_RELAY.port || 80,
+      method: req.method,
+      path: `/live/${camera}/${action}`,
+      headers: { 'x-smg-cid': cid, 'content-length': 0 },
+      timeout: 60_000,
+    },
+    (upRes) => {
+      res.writeHead(upRes.statusCode ?? 502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' })
+      upRes.pipe(res)
+    },
+  )
+  up.on('error', (err) => {
+    log(`live relay error: ${err.code ?? err.message}`)
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({ error: 'unavailable', message: 'Live video is unavailable right now.' }))
+    } else res.destroy()
+  })
+  up.end()
+}
+
+/** A POST from a page on this same site (the player), not from another site. */
+function sameOrigin(req) {
+  try {
+    return new URL(String(req.headers.origin)).host === req.headers.host
+  } catch {
+    return false
+  }
+}
+
 // ---------- proxy ----------
 
 const HOP = new Set([
@@ -308,6 +463,16 @@ const server = http.createServer((req, res) => {
 
   const session = readCookie(req.headers.cookie)
   if (!session) return deny(res, 403, 'Open the map from the 365 SMG Client Portal.')
+  const live = LIVE_PATH.exec(url.pathname)
+  if (live || url.pathname.startsWith('/live/')) {
+    if (!LIVE_RELAY || !live) return deny(res, 404, 'Live video isn’t available here.')
+    const [, camera, action] = live
+    if (!action) return req.method === 'GET' ? livePage(res, camera) : deny(res, 405, 'Not allowed.')
+    const method = action === 'status' ? 'GET' : 'POST'
+    if (req.method !== method) return deny(res, 405, 'Not allowed.')
+    if (method === 'POST' && !sameOrigin(req)) return deny(res, 403, 'Not allowed.')
+    return liveRelay(req, res, session.cid, camera, action)
+  }
   if (!LIVE_VIDEO && STREAM_PATH.test(url.pathname)) {
     res.writeHead(403, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
     return res.end(JSON.stringify({ error: 'live_video_off', message: 'Live video isn’t available here. Use “Watch live on FL511”.' }))
@@ -349,7 +514,7 @@ server.headersTimeout = 20_000
 server.requestTimeout = 0 // streams (HLS) can be long; idle sockets still time out
 server.keepAliveTimeout = 65_000
 server.listen(LISTEN_PORT, LISTEN_HOST, () =>
-  log(`listening on ${LISTEN_HOST}:${LISTEN_PORT}, proxying to ${UPSTREAM.origin} as ${UPSTREAM_HOST}, live video ${LIVE_VIDEO ? 'on' : 'off'}`),
+  log(`listening on ${LISTEN_HOST}:${LISTEN_PORT}, proxying to ${UPSTREAM.origin} as ${UPSTREAM_HOST}, live video ${LIVE_VIDEO ? 'on' : 'off'}, Stream player ${LIVE_RELAY ? 'on' : 'off'}`),
 )
 
 const stop = () => {

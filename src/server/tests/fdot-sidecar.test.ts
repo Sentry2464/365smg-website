@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readFileSync, statSync } from 'node:fs'
 import http from 'node:http'
 import net, { type AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -25,6 +25,7 @@ const seen: { path: string; ua?: string }[] = []
 let fl511: http.Server
 let sidecar: ChildProcess
 let base = ''
+const dir = mkdtempSync(path.join(tmpdir(), 'fdot-'))
 
 const freePort = () =>
   new Promise<number>((resolve) => {
@@ -58,7 +59,8 @@ beforeAll(async () => {
       FDOT_BASE: `http://127.0.0.1:${(fl511.address() as AddressInfo).port}`,
       FDOT_PORT: String(port),
       FDOT_COUNTIES: 'Orange',
-      FDOT_STATE_FILE: path.join(mkdtempSync(path.join(tmpdir(), 'fdot-')), 'cameras.json'),
+      FDOT_STATE_FILE: path.join(dir, 'cameras.json'),
+      FDOT_PACK_FILE: path.join(dir, 'cctv_sources.florida.json'),
     },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
@@ -94,6 +96,10 @@ describe('FDOT camera sidecar', () => {
       poseSource: 'fdot',
       license: 'Florida Department of Transportation / FL511 (approved for 365 SMG clients)',
     })
+    // The same pack, as the file God's Eye reads: a bare JSON array, world-readable.
+    const file = path.join(dir, 'cctv_sources.florida.json')
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(pack)
+    expect(statSync(file).mode & 0o044).toBe(0o044)
     const listCalls = seen.filter((s) => s.path === '/List/GetData/Cameras')
     expect(listCalls.length).toBe(2) // 152 rows, 100 per page
     expect(listCalls.every((s) => s.ua === '365SMG-IntelMap (globe.365securitymg.com; admin@365securitymg.com)')).toBe(true)

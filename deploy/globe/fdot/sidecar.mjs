@@ -28,6 +28,8 @@ const USER_AGENT = env('FDOT_USER_AGENT', '365SMG-IntelMap (globe.365securitymg.
 const LICENSE = env('FDOT_LICENSE', 'Florida Department of Transportation / FL511 (approved for 365 SMG clients)')
 const LIST_REFRESH_MS = Number(env('FDOT_LIST_REFRESH_MIN', '30')) * 60_000
 const STATE_FILE = env('FDOT_STATE_FILE', '') // e.g. /var/lib/fdot-cameras/cameras.json
+// The pack God's Eye reads (its CCTV_SOURCES_FILE), rewritten after each list refresh.
+const PACK_FILE = env('FDOT_PACK_FILE', '') // e.g. /var/lib/fdot-cameras/cctv_sources.florida.json
 // Optional filters, to keep the pack to the area that matters:
 //   FDOT_COUNTIES="Orange,Seminole,Osceola"   FDOT_BOUNDS="27.9,-82.0,29.1,-80.6" (minLat,minLng,maxLat,maxLng)
 const COUNTIES = env('FDOT_COUNTIES', '')
@@ -159,6 +161,18 @@ async function loadSavedList() {
   }
 }
 
+/** Writes the God's Eye pack (a JSON array) atomically, readable by God's Eye's user. */
+async function writePack() {
+  if (!PACK_FILE || cameras.size === 0) return
+  try {
+    await mkdir(dirname(PACK_FILE), { recursive: true })
+    await writeFile(`${PACK_FILE}.tmp`, JSON.stringify([...cameras.values()].map(packEntry), null, 1), { mode: 0o644 })
+    await rename(`${PACK_FILE}.tmp`, PACK_FILE)
+  } catch (err) {
+    log(`could not write the God's Eye pack: ${err.message}`)
+  }
+}
+
 async function saveList() {
   if (!STATE_FILE) return
   try {
@@ -178,8 +192,9 @@ function refreshList() {
       if (list.length === 0) throw new Error('camera list came back empty')
       cameras = new Map(list.map((c) => [c.id, c]))
       listAt = Date.now()
-      log(`camera list: ${cameras.size} cameras`)
       await saveList()
+      await writePack()
+      log(`camera list: ${cameras.size} cameras`)
     })
     .catch((err) => log(`camera list refresh failed (keeping ${cameras.size}): ${err.message}`))
     .finally(() => {
@@ -303,6 +318,7 @@ const server = http.createServer(async (req, res) => {
 })
 
 await loadSavedList()
+await writePack() // so God's Eye has cameras even if FDOT is down at start-up
 void refreshList()
 setInterval(() => void refreshList(), 5 * 60_000).unref()
 server.listen(LISTEN_PORT, LISTEN_HOST, () =>

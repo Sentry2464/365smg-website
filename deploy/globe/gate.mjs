@@ -41,6 +41,10 @@ const TICKETS_PER_MINUTE_ALL = Number(env('GATE_TICKETS_PER_MINUTE_ALL', '600'))
 const STREAMS_PER_CLIENT = Number(env('GATE_STREAMS_PER_CLIENT', '1'))
 const STREAM_PATH = new RegExp(env('GATE_STREAM_PATH', '^/api/cctv/(?:stream|media)/([^/?]+)'))
 const STREAM_IDLE_MS = Number(env('GATE_STREAM_IDLE_MS', '20000'))
+// A new camera may take over a slot whose stream has had no request for this long (the
+// viewer left without God's Eye's DELETE getting through). A live HLS player asks for the
+// playlist or a segment at least every segment length (up to ~6 s), so 8 s is safely quiet.
+const STREAM_TAKEOVER_MS = Number(env('GATE_STREAM_TAKEOVER_MS', '8000'))
 
 // Separate keys for tickets and cookies, both from the one shared secret.
 const key = (label) => createHmac('sha256', SECRET).update(`gev-gate/${label}`).digest()
@@ -163,15 +167,25 @@ setInterval(() => {
   }
 }, 5_000).unref()
 
-/** Null to go ahead, or the camera already streaming for this client. */
-function streamConflict(cid, path) {
+/**
+ * Null to go ahead, or the camera already streaming for this client. God's Eye closes a
+ * stream with DELETE /api/cctv/media/<id>?lease=…, which frees the slot at once (and is
+ * never refused); everything else for a camera keeps its slot alive.
+ */
+function streamConflict(cid, path, method) {
   if (STREAMS_PER_CLIENT <= 0) return null
   const m = STREAM_PATH.exec(path)
   if (!m) return null
   const cam = decodeURIComponent(m[1])
-  const now = Date.now()
   const cams = streams.get(cid) ?? new Map()
-  for (const [c, at] of cams) if (now - at >= STREAM_IDLE_MS) cams.delete(c)
+  if (method === 'DELETE') {
+    cams.delete(cam)
+    if (cams.size === 0) streams.delete(cid)
+    return null
+  }
+  const now = Date.now()
+  // Drop streams that have gone quiet: the viewer has moved on even if no DELETE arrived.
+  for (const [c, at] of cams) if (c !== cam && now - at >= STREAM_TAKEOVER_MS) cams.delete(c)
   if (!cams.has(cam) && cams.size >= STREAMS_PER_CLIENT) return [...cams.keys()][0]
   cams.set(cam, now)
   streams.set(cid, cams)
@@ -289,7 +303,7 @@ const server = http.createServer((req, res) => {
 
   const session = readCookie(req.headers.cookie)
   if (!session) return deny(res, 403, 'Open the map from the 365 SMG Client Portal.')
-  const busy = streamConflict(session.cid, url.pathname)
+  const busy = streamConflict(session.cid, url.pathname, req.method)
   if (busy) {
     res.writeHead(429, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Retry-After': String(Math.ceil(STREAM_IDLE_MS / 1000)) })
     return res.end(JSON.stringify({ error: 'stream_limit', message: 'Close your other live camera first.', streaming: busy }))

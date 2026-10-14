@@ -43,6 +43,7 @@ beforeAll(async () => {
       GATE_UPSTREAM: `http://127.0.0.1:${upPort}`,
       GATE_TICKETS_PER_MINUTE: '8',
       GATE_STREAM_IDLE_MS: '400',
+      GATE_STREAM_TAKEOVER_MS: '250',
     },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
@@ -150,6 +151,20 @@ describe('globe gate', () => {
     expect((await get('/api/cctv/frame/fdot-9', { cookie: a })).status).toBe(200) // stills don't count
     await new Promise((r) => setTimeout(r, 500)) // the first stream goes idle
     expect((await get('/api/cctv/stream/fdot-2', { cookie: a })).status).toBe(200)
+  })
+
+  it('frees the slot as soon as God’s Eye closes the stream, or when it goes quiet', async () => {
+    // Its own client IP, so the earlier cases' sign-ins don't hit the ticket rate limit.
+    const c = cookieOf(await get(`/?t=${globeTicket(SECRET, 'client-c')}`, { 'cf-connecting-ip': '192.0.2.10' }))
+    const del = (p: string) => fetch(base + p, { method: 'DELETE', redirect: 'manual', headers: { cookie: c } })
+    expect((await get('/api/cctv/media/fdot-1?session=s1&lease=l1', { cookie: c })).status).toBe(200)
+    expect((await get('/api/cctv/media/fdot-2?session=s2', { cookie: c })).status).toBe(429)
+    expect((await del('/api/cctv/media/fdot-1?lease=l1')).status).toBe(200) // proxied, and frees the slot
+    expect((await get('/api/cctv/media/fdot-2?session=s2', { cookie: c })).status).toBe(200) // straight away
+    // fdot-2 is left open with no DELETE; once quiet, a new camera takes the slot over.
+    await new Promise((r) => setTimeout(r, 300))
+    expect((await get('/api/cctv/stream/fdot-3', { cookie: c })).status).toBe(200)
+    expect((await get('/api/cctv/stream/fdot-2', { cookie: c })).status).toBe(429)
   })
 
   it('rate-limits ticket checks per client IP', async () => {

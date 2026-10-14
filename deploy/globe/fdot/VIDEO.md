@@ -9,7 +9,8 @@ arrive, so it can be built to fit them.
 - **Gate:** `deploy/globe/gate.mjs` allows each client one live camera at a time
   (`GATE_STREAMS_PER_CLIENT=1`). A second camera gets `429` with "Close your other live camera
   first". A stream frees itself 20 s after its last request (`GATE_STREAM_IDLE_MS`; God's Eye
-  drops idle streams after 15 s).
+  drops idle streams after 15 s). Closing a camera (God's Eye sends `DELETE /api/cctv/media/<id>`) frees
+  the slot at once, and a camera quiet for 8 s (`GATE_STREAM_TAKEOVER_MS`) can be taken over.
   - The limit is per client id from the gate cookie, so two users at the same client share it.
 - **God's Eye:** `deploy/globe/gev-patches/apply.sh` raises God's Eye's server-wide HLS session
   limit from 2 to 5.

@@ -25,6 +25,7 @@ import type { RegistryView } from '@/server/registry'
 import { WantedCard } from './WantedCard'
 import type { MissingList } from '@/server/fdle'
 import type { WantedList } from '@/server/publicsafety'
+import { goToSection, SECTIONS, useActiveSection } from './sections'
 import { Ticker } from './Ticker'
 
 /** Design-review switches, set from the URL (see src/app/portal/page.tsx). */
@@ -125,7 +126,7 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
           </div>
         )}
 
-        <main className="cp-col cp-main">
+        <main id="cp-main" tabIndex={-1} className="cp-col cp-main">
           <div className="cp-greet">
             <div className="cp-greet__text">
               <span className="cp-greet__meta">
@@ -194,27 +195,35 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
             </span>
             <span className="cp-footer__right">
               <span>Data: NWS, NHC, DHS, FBI, FDLE, FDOT, USGS, NASA</span>
-              <a href="#">Privacy</a>
-              <a href="#">Terms</a>
             </span>
           </div>
         </footer>
 
-        <nav className="cp-tabbar" aria-label="Portal sections">
-          <a href="#" aria-current="page">
-            <span aria-hidden="true">⌂</span>Home
-          </a>
-          <a href="#">
-            <span aria-hidden="true">⚠</span>Alerts
-          </a>
-          <a href="#">
-            <span aria-hidden="true">◎</span>Map
-          </a>
-          <a href="#">
-            <span aria-hidden="true">▤</span>Briefings
-          </a>
-        </nav>
+        <TabBar />
       </div>
     </PortalProvider>
+  )
+}
+
+/** The phone tab bar: the same sections as the header. */
+function TabBar() {
+  const active = useActiveSection()
+  return (
+    <nav className="cp-tabbar" aria-label="Portal sections">
+      {SECTIONS.map((s) => (
+        <a
+          key={s.id}
+          href={s.id === 'top' ? '/portal' : `#${s.id}`}
+          aria-current={active === s.id ? 'location' : undefined}
+          onClick={(e) => {
+            e.preventDefault()
+            goToSection(s.id)
+          }}
+        >
+          <span aria-hidden="true">{s.icon}</span>
+          {s.short}
+        </a>
+      ))}
+    </nav>
   )
 }

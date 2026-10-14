@@ -2,12 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
-import Link from 'next/link'
 import { signOut } from '@/app/portal/actions'
 import { usePortal } from './context'
 import { ALL_SITES, siteLabel, type SiteId } from './data'
-
-const navItems = ['Home', 'Alerts', 'Intel map', 'Briefings', 'Podcasts', 'Security tips', 'Investigations']
+import { goToSection, SECTIONS, useActiveSection } from './sections'
 
 export function SiteSelect({
   id,
@@ -82,25 +80,43 @@ function AccountMenu() {
 
 export function PortalHeader({ siteId, onSiteChange }: { siteId: SiteId; onSiteChange: (id: SiteId) => void }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const active = useActiveSection()
+  const links = (onPick?: () => void) =>
+    SECTIONS.map((s) => (
+      <a
+        key={s.id}
+        href={s.id === 'top' ? '/portal' : `#${s.id}`}
+        aria-current={active === s.id ? 'location' : undefined}
+        onClick={(e) => {
+          e.preventDefault()
+          onPick?.()
+          goToSection(s.id)
+        }}
+      >
+        {s.label}
+      </a>
+    ))
 
   return (
     <>
       <div className="cp-goldbar" />
       <header className="cp-header">
         <div className="cp-col cp-header__row">
-          <Link href="/portal" className="cp-brand" aria-label="365 SMG Client Portal home">
+          <a
+            href="https://365securitymg.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="cp-brand"
+            aria-label="365 Security Management Group website (opens in a new tab)"
+          >
             <Image src="/portal/365smg-logo.png" alt="" width={336} height={315} priority />
             <span className="cp-brand__text">
               <span className="cp-brand__title">Client Portal</span>
               <span className="cp-brand__sub">365 Security Management Group</span>
             </span>
-          </Link>
+          </a>
           <nav className="cp-nav" aria-label="Portal">
-            {navItems.map((label, i) => (
-              <a key={label} href="#" aria-current={i === 0 ? 'page' : undefined}>
-                {label}
-              </a>
-            ))}
+            {links()}
           </nav>
           <div className="cp-header__right">
             <div className="cp-picker">
@@ -122,11 +138,7 @@ export function PortalHeader({ siteId, onSiteChange }: { siteId: SiteId; onSiteC
         </div>
         {menuOpen && (
           <nav id="cp-menu" className="cp-menu" aria-label="Portal">
-            {navItems.map((label, i) => (
-              <a key={label} href="#" aria-current={i === 0 ? 'page' : undefined} onClick={() => setMenuOpen(false)}>
-                {label}
-              </a>
-            ))}
+            {links(() => setMenuOpen(false))}
             <form action={signOut}>
               <button type="submit" className="cp-menu__signout">
                 Sign out

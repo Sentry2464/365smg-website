@@ -45,7 +45,7 @@ export function WeatherCard({ site }: { site?: Site }) {
 export function AlertsCard({ alerts }: { alerts: Alert[] }) {
   const { sites } = usePortal()
   return (
-    <section className="cp-card cp-area-alerts" aria-labelledby="cp-alerts-title">
+    <section id="alerts" tabIndex={-1} className="cp-card cp-area-alerts cp-anchor" aria-labelledby="cp-alerts-title">
       <div className="cp-card__head">
         <h2 id="cp-alerts-title" className="cp-card__title">
           Alerts near your sites
@@ -76,9 +76,6 @@ export function AlertsCard({ alerts }: { alerts: Alert[] }) {
           </ul>
         </>
       )}
-      <a className="cp-more" href="#">
-        All alerts →
-      </a>
     </section>
   )
 }
@@ -184,9 +181,11 @@ export function BriefingsCard() {
             <span className="cp-brief__title">
               {briefing.month} · {briefing.area}
             </span>
-            <a className="cp-more" href={briefing.url}>
-              Read briefing →
-            </a>
+            {realLink(briefing.url) && (
+              <a className="cp-more" href={briefing.url}>
+                Read briefing →
+              </a>
+            )}
           </span>
         </div>
         <div className="cp-pod">
@@ -211,9 +210,11 @@ export function BriefingsCard() {
               {fmt(pos)} / {fmt(podcast.durationSec)}
             </span>
           </div>
-          <a className="cp-more cp-more--plain" href={podcast.url}>
-            All episodes →
-          </a>
+          {realLink(podcast.url) && (
+            <a className="cp-more cp-more--plain" href={podcast.url}>
+              All episodes →
+            </a>
+          )}
         </div>
       </div>
       <div className="cp-pod--mobile">
@@ -225,4 +226,9 @@ export function BriefingsCard() {
       </div>
     </section>
   )
+}
+
+/** A link worth showing: sample content uses '#' until the real page exists. */
+function realLink(url: string | undefined) {
+  return !!url && url !== '#'
 }

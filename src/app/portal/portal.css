@@ -152,7 +152,7 @@ body:has(.cp) {
 .cp .cp-nav a:hover {
   color: var(--gold);
 }
-.cp .cp-nav a[aria-current='page'] {
+.cp .cp-nav a[aria-current] {
   color: var(--gold);
   font-weight: 700;
   border-bottom: 2px solid var(--gold);
@@ -225,7 +225,7 @@ body:has(.cp) {
   color: var(--on-navy);
   border-bottom: 1px solid var(--navy-line);
 }
-.cp .cp-menu a[aria-current='page'] {
+.cp .cp-menu a[aria-current] {
   color: var(--gold);
   font-weight: 700;
 }
@@ -1618,7 +1618,7 @@ textarea.cp-input {
     font-size: 12px;
     border-top: 2px solid transparent;
   }
-  .cp .cp-tabbar a[aria-current='page'] {
+  .cp .cp-tabbar a[aria-current] {
     color: var(--gold);
     font-weight: 700;
     border-top-color: var(--gold);
@@ -2030,4 +2030,14 @@ textarea.cp-input {
 
 .cp-alerts__nearby {
   margin: 0 0 8px;
+}
+
+/* In-page sections the nav scrolls to: a little room above, and no focus ring on the
+   section itself when focus is moved there. */
+.cp-anchor {
+  scroll-margin-top: 16px;
+}
+.cp-anchor:focus,
+#cp-main:focus {
+  outline: none;
 }

@@ -214,7 +214,7 @@ export function GlobeMap({
   embedUrl.searchParams.set('embed', '1')
 
   return (
-    <section className="cp-card cp-map cp-area-map" aria-labelledby="cp-map-title">
+    <section id="intel-map" tabIndex={-1} className="cp-card cp-map cp-area-map cp-anchor" aria-labelledby="cp-map-title">
       <div className="cp-map__head">
         <h2 id="cp-map-title" className="cp-card__title">
           Intel map

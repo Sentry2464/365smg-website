@@ -52,9 +52,6 @@ export function Ticker() {
       >
         {paused ? '▶' : '❚❚'}
       </button>
-      <a className="cp-ticker__all" href="#">
-        All news →
-      </a>
     </section>
   )
 }

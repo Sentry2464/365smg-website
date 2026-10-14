@@ -45,7 +45,7 @@ export function InvestigationsSection({ forceSent }: { forceSent?: boolean }) {
   }
 
   return (
-    <section className="cp-formcard" aria-labelledby="cp-inv-title">
+    <section id="investigations" tabIndex={-1} className="cp-formcard cp-anchor" aria-labelledby="cp-inv-title">
       <div className="cp-formcard__intro">
         <span className="cp-label">365 SMG Investigations</span>
         <h2 id="cp-inv-title">Private &amp; Corporate Investigations</h2>

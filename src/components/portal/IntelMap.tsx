@@ -38,7 +38,9 @@ export function IntelMap({
 
   return (
     <section
-      className={`cp-card cp-map cp-area-map${expanded ? ' cp-map--expanded' : ''}`}
+      id="intel-map"
+      tabIndex={-1}
+      className={`cp-card cp-map cp-area-map cp-anchor${expanded ? ' cp-map--expanded' : ''}`}
       aria-labelledby="cp-map-title"
       role={expanded ? 'dialog' : undefined}
       aria-modal={expanded || undefined}

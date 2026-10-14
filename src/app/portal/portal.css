@@ -1879,6 +1879,11 @@ textarea.cp-input {
 .cp-globe {
   background: var(--navy);
 }
+/* The registrant's number on the intel map's Registry pins. */
+.cp-registry__mark {
+  color: #0e7490;
+  font-weight: 700;
+}
 /* The live globe: taller than the old static map, and a full-screen mode. */
 .cp-map--globe .cp-map__canvas {
   height: clamp(460px, 68vh, 820px);

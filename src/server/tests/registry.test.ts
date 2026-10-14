@@ -96,6 +96,8 @@ describe('FDLE registry', () => {
       ['FIRST NEAR', 'Predator', 'Released - Subject to Registration', 'Permanent'],
     ])
     expect(view.expanded).toBe(false)
+    // Each carries its geocoded position, for the intel map's numbered Registry pins.
+    expect(view.people.every((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))).toBe(true)
     expect(registryNear(db, other.id)).toBeNull() // not opted in
 
     // Next file no longer lists #1: gone. Turning the client off drops the county entirely.

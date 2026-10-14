@@ -245,6 +245,9 @@ export interface NearbyRegistrant {
   addressType: string
   siteName: string
   distanceMi: number
+  /** Where the published address geocoded to, for the intel map's Registry pins. */
+  lat: number
+  lng: number
 }
 
 export interface RegistryView {
@@ -299,6 +302,8 @@ export function registryNear(db: Database, clientId: string): RegistryView | nul
         addressType: row.address_type,
         siteName: s.name,
         distanceMi: Math.round(d * 10) / 10,
+        lat: row.lat,
+        lng: row.lng,
       })
     }
   }

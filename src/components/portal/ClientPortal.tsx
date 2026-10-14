@@ -191,7 +191,7 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
 
           <div className="cp-dash">
             {globeUrl ? (
-              <GlobeMap siteId={siteId} url={globeUrl} alerts={feed.alerts} storms={storms} localCameras={localCameras} />
+              <GlobeMap siteId={siteId} url={globeUrl} alerts={feed.alerts} storms={storms} localCameras={localCameras} registry={registry} />
             ) : (
               <IntelMap siteId={siteId} incidents={feed.incidents} demo={feed.demo} />
             )}

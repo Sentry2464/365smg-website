@@ -1,4 +1,5 @@
 import type { RegistryView } from '@/server/registry'
+import { registryMark } from './registryMark'
 
 const fmt = (iso: string) =>
   new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/New_York' })
@@ -42,9 +43,14 @@ export function RegistryCard({ view }: { view: RegistryView | null }) {
         </div>
       ) : (
         <ul className="cp-registry__list">
-          {view.people.map((p) => (
+          {view.people.map((p, i) => (
             <li key={p.id} className="cp-registry__item">
-              <span className="cp-wanted__name">{p.name}</span>
+              <span className="cp-wanted__name">
+                <span className="cp-registry__mark" title="Its number on the intel map’s Registry pins">
+                  {registryMark(i + 1)}
+                </span>{' '}
+                {p.name}
+              </span>
               <span className="cp-meta">
                 {p.subjectType} · {p.status}
               </span>

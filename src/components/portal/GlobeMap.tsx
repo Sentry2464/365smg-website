@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { usePortal } from './context'
 import { distanceMi } from '@/lib/geo'
 import type { Storm } from '@/server/storms'
+import type { NearbyRegistrant, RegistryView } from '@/server/registry'
+import { registryMark } from './registryMark'
 import { ALL_SITES, type Alert, type Site, type SiteId } from './data'
 
 // The intel map: the OSIRIS client edition (globe/osiris) or God's Eye View, framed in embed
@@ -38,14 +40,14 @@ const MAX_PINS = 24 // the embed accepts at most 24 annotations
 type Located = Site & { lat: number; lng: number }
 
 /** Camera over one site, or high enough to take in all of them. */
-function cameraFor(sites: Located[]) {
+function cameraFor(sites: Located[], minAltitude = 25_000) {
   const lat = sites.reduce((a, s) => a + s.lat, 0) / sites.length
   const lon = sites.reduce((a, s) => a + s.lng, 0) / sites.length
   // Rough spread in km (1° ≈ 111 km), then pull back far enough to see it with margin.
   const spreadKm = Math.max(
     ...sites.map((s) => Math.hypot(s.lat - lat, (s.lng - lon) * Math.cos((lat * Math.PI) / 180)) * 111),
   )
-  const altitude_m = Math.round(Math.max(25_000, spreadKm * 3_000))
+  const altitude_m = Math.round(Math.max(minAltitude, spreadKm * 3_000))
   return { lat, lon, altitude_m, heading_deg: 0, pitch_deg: -60 }
 }
 
@@ -84,12 +86,28 @@ function incidentPins(alerts: Alert[]) {
   return pins
 }
 
+/**
+ * FDLE registrants near the sites as numbered pins, matching the Registry card's numbers.
+ * No names on the globe: the number, the registry's own type and the distance; the card
+ * has the record and FDLE's warnings.
+ */
+function registryPins(people: (NearbyRegistrant & { n: number })[], budget: number) {
+  return people.slice(0, Math.max(0, budget)).map((p) => ({
+    type: 'pin',
+    latitude: p.lat,
+    longitude: p.lng,
+    label: `${registryMark(p.n)} ${p.subjectType || 'Registrant'} · ${p.distanceMi} mi from ${p.siteName}`.slice(0, 120),
+    color: 'cyan',
+  }))
+}
+
 export function GlobeMap({
   siteId,
   url,
   alerts,
   storms,
   localCameras,
+  registry = null,
 }: {
   siteId: SiteId
   url: string
@@ -98,6 +116,8 @@ export function GlobeMap({
   storms: Storm[] | null
   /** True once God's Eye has public cameras near the client sites (SMG_GLOBE_LOCAL_CAMERAS=1). */
   localCameras: boolean
+  /** FDLE registry near the sites; only for opted-in clients (adds the Registry pill). */
+  registry?: RegistryView | null
 }) {
   const { sites } = usePortal()
   const frame = useRef<HTMLIFrameElement>(null)
@@ -151,7 +171,16 @@ export function GlobeMap({
     }
   }
 
+  // Registry pins: off until picked. Numbered in the card's order, so ③ here is ③ there.
+  const [showRegistry, setShowRegistry] = useState(false)
   const located = useMemo(() => sites.filter((s): s is Located => s.lat != null && s.lng != null), [sites])
+  const registryPeople = useMemo(() => {
+    if (!showRegistry || !registry) return []
+    const numbered = registry.people.map((p, i) => ({ ...p, n: i + 1 }))
+    const site = siteId === ALL_SITES ? null : located.find((s) => s.id === siteId)
+    return numbered.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && (!site || p.siteName === site.name))
+  }, [showRegistry, registry, siteId, located])
+  const registryRoom = MAX_PINS - located.length
   const activeStorms = layers.Hurricanes && storms?.length ? storms : null
 
   const send = useCallback(() => {
@@ -161,12 +190,14 @@ export function GlobeMap({
     const view = {
       camera: activeStorms
         ? cameraWithStorms(focus.length ? focus : located, activeStorms)
-        : cameraFor(focus.length ? focus : located),
+        : cameraFor(focus.length ? focus : located, registryPeople.length ? 8_000 : 25_000),
       layers: (Object.keys(LAYERS) as Layer[]).filter((l) => layers[l]).flatMap((l) => LAYERS[l]),
       annotations: [...located.map((s) => {
         // Worst alert at the site colours its pin and names the event.
         const hit = alerts.find((a) => !a.nearby && (a.siteId === s.id || a.siteId === null))
-        const color = hit?.severity === 'HIGH' ? 'red' : hit?.severity === 'MED' ? 'amber' : s.id === siteId ? 'cyan' : 'primary'
+        // Cyan marks the picked site, unless the registry's cyan pins are showing.
+        const picked = s.id === siteId && registryPeople.length === 0
+        const color = hit?.severity === 'HIGH' ? 'red' : hit?.severity === 'MED' ? 'amber' : picked ? 'cyan' : 'primary'
         return {
           type: 'pin',
           latitude: s.lat,
@@ -174,7 +205,7 @@ export function GlobeMap({
           label: (hit ? `${s.name} · ${hit.title}` : s.name).slice(0, 120),
           color,
         }
-      }), ...incidentPins(alerts)].slice(0, MAX_PINS),
+      }), ...registryPins(registryPeople, registryRoom), ...incidentPins(alerts)].slice(0, MAX_PINS),
     }
     const id = `smg-${++seq.current}`
     const post = () => win.postMessage({ type: 'gev:view', id, view }, origin)
@@ -185,7 +216,7 @@ export function GlobeMap({
     retry.current = setTimeout(() => {
       if (lastAcked.current !== id && lastSent.current === id) post()
     }, 10_000)
-  }, [located, siteId, layers, origin, alerts, activeStorms])
+  }, [located, siteId, layers, origin, alerts, activeStorms, registryPeople, registryRoom])
 
   useEffect(() => () => clearTimeout(retry.current), [])
 
@@ -253,6 +284,11 @@ export function GlobeMap({
               {l}
             </button>
           ))}
+          {registry && (
+            <button type="button" className="cp-pill" aria-pressed={showRegistry} onClick={() => setShowRegistry((v) => !v)}>
+              Registry
+            </button>
+          )}
         </div>
         <button
           type="button"
@@ -295,6 +331,14 @@ export function GlobeMap({
           <p className="cp-meta cp-storms__note">No public cameras in this area yet.</p>
         )}
         {layers.Hurricanes && <StormList storms={storms} sites={located} />}
+        {showRegistry && registry && (
+          <p className="cp-meta cp-storms__note">
+            {registryPeople.length === 0
+              ? 'No registrants to show on the map for this view.'
+              : `Registry: ${Math.min(registryPeople.length, registryRoom)} registrant${registryPeople.length === 1 ? '' : 's'} as numbered pins, matching the list in the registry card. Names and FDLE’s warnings are in the card.`}
+            {registryPeople.length > registryRoom && ` The map has room for ${registryRoom}; the card lists all ${registryPeople.length}.`}
+          </p>
+        )}
       </div>
     </section>
   )

@@ -5,7 +5,7 @@ import { usePortal } from './context'
 import { distanceMi } from '@/lib/geo'
 import type { Storm } from '@/server/storms'
 import type { NearbyRegistrant, RegistryView } from '@/server/registry'
-import { registryMark } from './registryMark'
+import { REGISTRY_OPEN, registryMark, registryNumber } from './registryMark'
 import { ALL_SITES, type Alert, type Site, type SiteId } from './data'
 
 // The intel map: the OSIRIS client edition (globe/osiris) or God's Eye View, framed in embed
@@ -242,6 +242,14 @@ export function GlobeMap({
       if (e.data?.type === 'gev:view-applied') {
         lastAcked.current = String(e.data.id)
         setReady(true)
+      }
+      // A Registry pin clicked on the globe (God's Eye patch 3): open its entry in the card.
+      if (e.data?.type === 'gev:pin-click' && typeof e.data.label === 'string') {
+        const n = registryNumber(e.data.label)
+        if (n == null) return
+        setFull(false)
+        // After full screen has closed, so the page can scroll to the entry.
+        setTimeout(() => window.dispatchEvent(new CustomEvent(REGISTRY_OPEN, { detail: n })), 50)
       }
     }
     window.addEventListener('message', onMessage)

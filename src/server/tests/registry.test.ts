@@ -98,6 +98,21 @@ describe('FDLE registry', () => {
     expect(view.expanded).toBe(false)
     // Each carries its geocoded position, for the intel map's numbered Registry pins.
     expect(view.people.every((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))).toBe(true)
+    // Details: FDLE's description verbatim, every listed address, and never the photo.
+    const near = view.people.find((p) => p.name === 'FIRST NEAR')!
+    expect(near.details).toEqual({
+      race: 'X',
+      sex: 'X',
+      height: `5'10"`,
+      weight: '180',
+      hair: 'X',
+      eyes: 'X',
+      birthDate: '01/01/1980',
+      victimMinor: 'No',
+      dcNumber: 'X1',
+      addresses: [{ type: 'Permanent', address: expect.stringContaining('ORLANDO, FL 32801 (ORANGE County)'), added: '01/01/2020' }],
+    })
+    expect(JSON.stringify(view)).not.toContain('CallImage')
     expect(registryNear(db, other.id)).toBeNull() // not opted in
 
     // Next file no longer lists #1: gone. Turning the client off drops the county entirely.

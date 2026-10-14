@@ -248,6 +248,54 @@ export interface NearbyRegistrant {
   /** Where the published address geocoded to, for the intel map's Registry pins. */
   lat: number
   lng: number
+  /** FDLE's published description, as in the data file (photos are left out). */
+  details: RegistrantDetails
+}
+
+export interface RegistrantDetails {
+  race: string
+  sex: string
+  height: string
+  weight: string
+  hair: string
+  eyes: string
+  birthDate: string
+  victimMinor: string
+  dcNumber: string
+  /** Every address FDLE lists (permanent, temporary, transient), with the date it was added. */
+  addresses: { type: string; address: string; added: string }[]
+}
+
+/** The descriptive fields of an FDLE record, verbatim (no photo). */
+export function registrantDetails(r: Record<string, string>): RegistrantDetails {
+  const v = (k: string) => (r[k] ?? '').trim()
+  const addresses = (
+    [
+      ['PERM', 'Permanent'],
+      ['TEMP', 'Temporary'],
+      ['TRANS', 'Transient'],
+    ] as const
+  ).flatMap(([prefix, type]) => {
+    const line1 = v(`${prefix}_ADDRESS_LINE_1`)
+    if (!line1) return []
+    const address = [line1, v(`${prefix}_ADDRESS_LINE_2`), v(`${prefix}_CITY`), [v(`${prefix}_STATE`), v(`${prefix}_ZIP5`)].filter(Boolean).join(' ')]
+      .filter(Boolean)
+      .join(', ')
+    const county = v(`${prefix}_COUNTY`)
+    return [{ type, address: county ? `${address} (${county} County)` : address, added: v(`${prefix}_ADDRESS_ADDED`) }]
+  })
+  return {
+    race: v('RACE'),
+    sex: v('SEX'),
+    height: v('HEIGHT'),
+    weight: v('WEIGHT'),
+    hair: v('HAIR'),
+    eyes: v('EYE_COLOR'),
+    birthDate: v('BIRTH_DATE'),
+    victimMinor: v('VICTIM_MINOR'),
+    dcNumber: v('DC_NUMBER'),
+    addresses,
+  }
 }
 
 export interface RegistryView {
@@ -304,6 +352,7 @@ export function registryNear(db: Database, clientId: string): RegistryView | nul
         distanceMi: Math.round(d * 10) / 10,
         lat: row.lat,
         lng: row.lng,
+        details: registrantDetails(r),
       })
     }
   }

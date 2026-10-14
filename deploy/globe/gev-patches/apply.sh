@@ -97,4 +97,43 @@ if (out === src) { console.log('live links already in place'); process.exit(0) }
 fs.writeFileSync(file, out)
 console.log(`live links: ${stream ? 'Stream player + ' : ''}FL511 ${fl511Url} (${file})`)
 JS
+# 3. Numbered Registry pins (labels starting ①…⑳ or #21…) become clickable when God's Eye is
+#    framed by the portal: a click or Enter posts {type: 'gev:pin-click', label} to the parent,
+#    which opens that registrant's entry in the portal's Registry card. Browser code: rebuild.
+FILE="$GEV_DIR/src/annotations/screenAnnotationRenderer.js"
+node - "$FILE" <<'JS'
+const fs = require('node:fs')
+const [file] = process.argv.slice(2)
+const src = fs.readFileSync(file, 'utf8')
+const BEGIN = '  // 365 SMG patch 3 begin'
+const END = '  // 365 SMG patch 3 end\n'
+const block = `${BEGIN}: numbered Registry pins report clicks to the portal framing the map.
+  if (typeof window !== 'undefined' && window.parent !== window && /^(?:[\\u2460-\\u2473]|#\\d{1,4})\\s/.test(text)) {
+    node.style.pointerEvents = 'auto';
+    node.style.cursor = 'pointer';
+    node.setAttribute('tabindex', '0');
+    node.setAttribute('role', 'link');
+    node.setAttribute('aria-label', \`\${text} (show in the registry list)\`);
+    const report = () => window.parent.postMessage({ type: 'gev:pin-click', label: text }, '*');
+    node.addEventListener('click', report);
+    node.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        report();
+      }
+    });
+  }
+${END}`
+const ANCHOR = '  // size the card to the text once it is in the DOM\n  requestAnimationFrame(() => sizeCallout(callout));\n  return callout;\n'
+let out
+if (src.includes(BEGIN)) {
+  out = src.slice(0, src.indexOf(BEGIN)) + block + src.slice(src.indexOf(END) + END.length)
+} else {
+  if (src.split(ANCHOR).length !== 2) { console.error(`callout anchor not found once in ${file}`); process.exit(1) }
+  out = src.replace(ANCHOR, ANCHOR.replace('  return callout;\n', block + '  return callout;\n'))
+}
+if (out === src) { console.log('clickable Registry pins already in place'); process.exit(0) }
+fs.writeFileSync(file, out)
+console.log(`clickable Registry pins (${file})`)
+JS
 echo "Done. Rebuild God's Eye (npm run build, as its own user), then restart it."

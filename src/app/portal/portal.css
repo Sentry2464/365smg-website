@@ -1607,7 +1607,7 @@ textarea.cp-input {
     border-top: 1px solid var(--navy-line);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-  .cp .cp-tabbar a {
+  .cp .cp-tabbar > a {
     height: 64px;
     display: flex;
     flex-direction: column;
@@ -1618,12 +1618,12 @@ textarea.cp-input {
     font-size: 12px;
     border-top: 2px solid transparent;
   }
-  .cp .cp-tabbar a[aria-current] {
+  .cp .cp-tabbar > a[aria-current] {
     color: var(--gold);
     font-weight: 700;
     border-top-color: var(--gold);
   }
-  .cp-tabbar a span {
+  .cp-tabbar > a span {
     font-size: 16px;
   }
 }
@@ -2040,4 +2040,129 @@ textarea.cp-input {
 .cp-anchor:focus,
 #cp-main:focus {
   outline: none;
+}
+
+/* Header "Public safety ▾" dropdown */
+.cp-navgroup {
+  position: relative;
+  display: flex;
+}
+.cp .cp-navgroup__btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  white-space: nowrap;
+  color: var(--on-navy);
+  font: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.cp .cp-navgroup__btn:hover,
+.cp .cp-navgroup__btn[aria-expanded='true'] {
+  color: var(--gold);
+}
+.cp .cp-navgroup__btn--current {
+  color: var(--gold);
+  font-weight: 700;
+  border-bottom: 2px solid var(--gold);
+  margin-bottom: -1px;
+}
+.cp-navgroup__list {
+  position: absolute;
+  top: calc(100% - 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 210px;
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  background: var(--navy-2);
+  border: 1px solid var(--navy-line);
+  border-radius: 6px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+}
+.cp .cp-navgroup__list a {
+  display: block;
+  padding: 10px 16px;
+  color: var(--on-navy);
+}
+.cp .cp-navgroup__list a:hover,
+.cp .cp-navgroup__list a:focus-visible {
+  background: var(--navy-3);
+  color: var(--gold);
+}
+.cp .cp-navgroup__list a[aria-current] {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+/* Mobile menu: a labelled group */
+.cp-menu__group {
+  display: flex;
+  flex-direction: column;
+}
+.cp-menu__heading {
+  padding: 14px 0 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--on-navy-muted);
+}
+.cp .cp-menu__group a {
+  padding-left: 14px;
+}
+
+/* Phone tab bar: "More" and its sheet */
+.cp .cp-tabbar__more {
+  height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--on-navy-muted);
+  font: inherit;
+  font-size: 12px;
+  background: none;
+  border: 0;
+  border-top: 2px solid transparent;
+}
+.cp .cp-tabbar__more span {
+  font-size: 16px;
+}
+.cp .cp-tabbar__more[aria-current],
+.cp .cp-tabbar__more[aria-expanded='true'] {
+  color: var(--gold);
+  border-top-color: var(--gold);
+}
+.cp .cp-tabbar__more[aria-current] {
+  font-weight: 700;
+}
+.cp-tabbar__sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  background: var(--navy-2);
+  border-top: 1px solid var(--navy-line);
+  box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.25);
+}
+.cp .cp-tabbar__sheet a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 var(--gutter);
+  color: var(--on-navy);
+  font-size: 15px;
+}
+.cp .cp-tabbar__sheet a[aria-current] {
+  color: var(--gold);
+  font-weight: 700;
 }

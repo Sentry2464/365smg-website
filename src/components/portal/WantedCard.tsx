@@ -7,7 +7,7 @@ const officeName = (slug: string) => slug.replace(/\b\w/g, (c) => c.toUpperCase(
 export function WantedCard({ lists }: { lists: WantedList[] }) {
   if (lists.length === 0) return null
   return (
-    <section className="cp-card cp-wanted" aria-labelledby="cp-wanted-title">
+    <section id="fbi-wanted" tabIndex={-1} className="cp-card cp-wanted cp-anchor" aria-labelledby="cp-wanted-title">
       <div className="cp-card__head">
         <h2 id="cp-wanted-title" className="cp-card__title">
           FBI Wanted · {lists.map((l) => `${officeName(l.office)} Field Office`).join(', ')}

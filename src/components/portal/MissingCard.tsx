@@ -8,7 +8,7 @@ const FDLE_PAGE = 'https://www.fdle.state.fl.us/mcicsearch/AllCurrentAlerts.asp'
 export function MissingCard({ list }: { list: MissingList | null }) {
   if (!list) return null
   return (
-    <section className="cp-card cp-wanted" aria-labelledby="cp-missing-title">
+    <section id="missing-persons" tabIndex={-1} className="cp-card cp-wanted cp-anchor" aria-labelledby="cp-missing-title">
       <div className="cp-card__head">
         <h2 id="cp-missing-title" className="cp-card__title">
           Missing persons alerts · Florida

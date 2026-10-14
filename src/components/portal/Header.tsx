@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { signOut } from '@/app/portal/actions'
 import { usePortal } from './context'
 import { ALL_SITES, siteLabel, type SiteId } from './data'
-import { goToSection, SECTIONS, useActiveSection } from './sections'
+import { NAV, sectionLinkProps, useActiveSection, type NavItem, type Section } from './sections'
 
 export function SiteSelect({
   id,
@@ -78,24 +78,78 @@ function AccountMenu() {
   )
 }
 
-export function PortalHeader({ siteId, onSiteChange }: { siteId: SiteId; onSiteChange: (id: SiteId) => void }) {
+/** Desktop "Public safety ▾": a disclosure menu (button + list of links). */
+function NavGroup({ label, items, active }: { label: string; items: Section[]; active: string }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const id = `cp-nav-${label.toLowerCase().replace(/\W+/g, '-')}`
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent | KeyboardEvent | FocusEvent) => {
+      if (e instanceof KeyboardEvent) {
+        if (e.key !== 'Escape') return
+        setOpen(false)
+        ref.current?.querySelector('button')?.focus()
+      } else if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', close)
+    document.addEventListener('focusin', close)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', close)
+      document.removeEventListener('focusin', close)
+    }
+  }, [open])
+
+  return (
+    <div className="cp-navgroup" ref={ref}>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={id}
+        className={items.some((i) => i.id === active) ? 'cp-navgroup__btn cp-navgroup__btn--current' : 'cp-navgroup__btn'}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {label} <span aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <ul id={id} className="cp-navgroup__list">
+          {items.map((i) => (
+            <li key={i.id}>
+              <a {...sectionLinkProps(i, active, () => setOpen(false))}>{i.label}</a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** The nav, keeping only the sections this client's dashboard actually shows. */
+function useNav(available: Set<string>): NavItem[] {
+  return NAV.flatMap((n): NavItem[] => {
+    if (!('group' in n)) return available.has(n.id) ? [n] : []
+    const items = n.items.filter((i) => available.has(i.id))
+    return items.length ? [{ ...n, items }] : []
+  })
+}
+
+export function PortalHeader({
+  siteId,
+  onSiteChange,
+  available,
+}: {
+  siteId: SiteId
+  onSiteChange: (id: SiteId) => void
+  /** Section ids rendered on this dashboard; links to anything else are hidden. */
+  available: Set<string>
+}) {
   const [menuOpen, setMenuOpen] = useState(false)
   const active = useActiveSection()
-  const links = (onPick?: () => void) =>
-    SECTIONS.map((s) => (
-      <a
-        key={s.id}
-        href={s.id === 'top' ? '/portal' : `#${s.id}`}
-        aria-current={active === s.id ? 'location' : undefined}
-        onClick={(e) => {
-          e.preventDefault()
-          onPick?.()
-          goToSection(s.id)
-        }}
-      >
-        {s.label}
-      </a>
-    ))
+  const nav = useNav(available)
+  const closeMenu = () => setMenuOpen(false)
 
   return (
     <>
@@ -116,7 +170,15 @@ export function PortalHeader({ siteId, onSiteChange }: { siteId: SiteId; onSiteC
             </span>
           </a>
           <nav className="cp-nav" aria-label="Portal">
-            {links()}
+            {nav.map((n) =>
+              'group' in n ? (
+                <NavGroup key={n.group} label={n.group} items={n.items} active={active} />
+              ) : (
+                <a key={n.id} {...sectionLinkProps(n, active)}>
+                  {n.label}
+                </a>
+              ),
+            )}
           </nav>
           <div className="cp-header__right">
             <div className="cp-picker">
@@ -138,7 +200,24 @@ export function PortalHeader({ siteId, onSiteChange }: { siteId: SiteId; onSiteC
         </div>
         {menuOpen && (
           <nav id="cp-menu" className="cp-menu" aria-label="Portal">
-            {links(() => setMenuOpen(false))}
+            {nav.map((n) =>
+              'group' in n ? (
+                <div key={n.group} className="cp-menu__group" role="group" aria-labelledby="cp-menu-group">
+                  <span id="cp-menu-group" className="cp-menu__heading">
+                    {n.group}
+                  </span>
+                  {n.items.map((i) => (
+                    <a key={i.id} {...sectionLinkProps(i, active, closeMenu)}>
+                      {i.label}
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <a key={n.id} {...sectionLinkProps(n, active, closeMenu)}>
+                  {n.label}
+                </a>
+              ),
+            )}
             <form action={signOut}>
               <button type="submit" className="cp-menu__signout">
                 Sign out

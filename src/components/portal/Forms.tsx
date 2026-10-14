@@ -181,7 +181,7 @@ export function FeedbackSection({ siteId, forceSent }: { siteId: SiteId; forceSe
   }
 
   return (
-    <section className="cp-formcard" aria-labelledby="cp-fb-title">
+    <section id="feedback" tabIndex={-1} className="cp-formcard cp-anchor" aria-labelledby="cp-fb-title">
       <div className="cp-formcard__intro">
         <h2 id="cp-fb-title">How can we serve you better?</h2>
         <p className="cp-mobile-hide">

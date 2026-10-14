@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState, useSyncExternalStore } from 'react'
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
 import { AlertsCard, BriefingsCard, NewsCard, TipsCard, WeatherCard } from './Cards'
 import { PortalProvider } from './context'
 import {
@@ -25,7 +25,19 @@ import type { RegistryView } from '@/server/registry'
 import { WantedCard } from './WantedCard'
 import type { MissingList } from '@/server/fdle'
 import type { WantedList } from '@/server/publicsafety'
-import { goToSection, SECTIONS, useActiveSection } from './sections'
+import {
+  ALERTS,
+  ALWAYS,
+  HOME,
+  MAP,
+  MISSING,
+  NAV,
+  REGISTRY,
+  sectionLinkProps,
+  useActiveSection,
+  WANTED,
+  type Section,
+} from './sections'
 import { Ticker } from './Ticker'
 
 /** Design-review switches, set from the URL (see src/app/portal/page.tsx). */
@@ -95,6 +107,16 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
     } catch {}
   }
 
+  // Sections this dashboard renders, so the nav never links to a card that isn't there
+  // (the same conditions the cards use to render nothing).
+  const available = useMemo(() => {
+    const ids = new Set(ALWAYS)
+    if (missing) ids.add(MISSING.id)
+    if (wanted.length) ids.add(WANTED.id)
+    if (registry) ids.add(REGISTRY.id)
+    return ids
+  }, [missing, wanted, registry])
+
   const summary = feed.summaries[siteId] ?? { threatLevel: 'LOW', activeAlertId: null }
   const siteAlerts = preview.emptyAlerts ? [] : alertsForSite(feed.alerts, siteId)
   const activeAlert = preview.noAlert ? null : (feed.alerts.find((a) => a.id === summary.activeAlertId) ?? null)
@@ -106,7 +128,7 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
   return (
     <PortalProvider value={{ user, client, sites }}>
       <div className="cp">
-        <PortalHeader siteId={siteId} onSiteChange={changeSite} />
+        <PortalHeader siteId={siteId} onSiteChange={changeSite} available={available} />
         <Ticker />
 
         {activeAlert && (
@@ -199,31 +221,51 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
           </div>
         </footer>
 
-        <TabBar />
+        <TabBar available={available} />
       </div>
     </PortalProvider>
   )
 }
 
-/** The phone tab bar: the same sections as the header. */
-function TabBar() {
+/** The phone tab bar: Home, Alerts, Map, and "More" for the rest of the dashboard. */
+function TabBar({ available }: { available: Set<string> }) {
   const active = useActiveSection()
+  const [more, setMore] = useState(false)
+  const main = [HOME, ALERTS, MAP]
+  const rest = NAV.flatMap((n) => ('group' in n ? n.items : [n])).filter(
+    (x): x is Section => available.has(x.id) && !main.includes(x),
+  )
+  const close = () => setMore(false)
   return (
     <nav className="cp-tabbar" aria-label="Portal sections">
-      {SECTIONS.map((s) => (
-        <a
-          key={s.id}
-          href={s.id === 'top' ? '/portal' : `#${s.id}`}
-          aria-current={active === s.id ? 'location' : undefined}
-          onClick={(e) => {
-            e.preventDefault()
-            goToSection(s.id)
-          }}
-        >
+      {main.map((s) => (
+        <a key={s.id} {...sectionLinkProps(s, active, close)}>
           <span aria-hidden="true">{s.icon}</span>
           {s.short}
         </a>
       ))}
+      <button
+        type="button"
+        className="cp-tabbar__more"
+        aria-expanded={more}
+        aria-controls="cp-tabbar-sheet"
+        aria-current={rest.some((s) => s.id === active) ? 'location' : undefined}
+        onClick={() => setMore((m) => !m)}
+      >
+        <span aria-hidden="true">☰</span>More
+      </button>
+      {more && (
+        <ul id="cp-tabbar-sheet" className="cp-tabbar__sheet">
+          {rest.map((s) => (
+            <li key={s.id}>
+              <a {...sectionLinkProps(s, active, close)}>
+                <span aria-hidden="true">{s.icon}</span>
+                {s.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
     </nav>
   )
 }

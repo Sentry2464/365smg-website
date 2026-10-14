@@ -9,7 +9,7 @@ const fmt = (iso: string) =>
 export function RegistryCard({ view }: { view: RegistryView | null }) {
   if (!view) return null
   return (
-    <section className="cp-card cp-wanted" aria-labelledby="cp-registry-title">
+    <section id="sex-offenders" tabIndex={-1} className="cp-card cp-wanted cp-anchor" aria-labelledby="cp-registry-title">
       <div className="cp-card__head">
         <h2 id="cp-registry-title" className="cp-card__title">
           Registered sexual offenders and predators near your sites

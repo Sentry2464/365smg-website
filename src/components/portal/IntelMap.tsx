@@ -45,7 +45,7 @@ export function IntelMap({
     >
       <div className="cp-map__head">
         <h2 id="cp-map-title" className="cp-card__title">
-          Intel map · God&apos;s Eye (OSIRIS)
+          Intel map
         </h2>
         <div className="cp-pills" role="group" aria-label="Map layers">
           {LAYERS.map((l) => (

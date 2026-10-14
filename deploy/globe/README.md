@@ -1,10 +1,11 @@
-# God's Eye View login gate (VM 151)
+# Intel map login gate (VM 151)
 
-`gate.mjs` sits between Cloudflare Tunnel and God's Eye View, so the globe at
+`gate.mjs` sits between Cloudflare Tunnel and the intel map (the OSIRIS client edition in
+`globe/osiris` on port 4174, or God's Eye View on 4173), so the map at
 `https://globe.365securitymg.com` only opens for people signed in to the client portal.
 
 ```
-browser ──► Cloudflare ──► cloudflared (VM 151) ──► gate 127.0.0.1:4180 ──► God's Eye (vite preview) 127.0.0.1:4173
+browser ──► Cloudflare ──► cloudflared (VM 151) ──► gate 127.0.0.1:4180 ──► intel map 127.0.0.1:4174 (OSIRIS) or :4173 (God's Eye)
 ```
 
 1. When a client opens their dashboard, the portal frames
@@ -15,7 +16,7 @@ browser ──► Cloudflare ──► cloudflared (VM 151) ──► gate 127.0
    `SameSite=Lax`, 12 hours) and redirects to the same address without the ticket, so the
    ticket never stays in the globe's address or reaches other sites in a `Referer`.
 3. Every other request needs the cookie. With it, the request goes to God's Eye with
-   Cloudflare and forwarding headers removed and `Host: localhost:4173`, streamed (tiles,
+   Cloudflare and forwarding headers removed and `Host: localhost:<port>`, streamed (tiles,
    HLS) and with WebSockets passed through. Without it: a short 403 page.
 
 `/healthz` answers `ok` without a cookie. Ticket checks are rate-limited (30 a minute per
@@ -50,7 +51,7 @@ or email. To rotate, change both and restart both services; open maps then need 
 preview listening on 127.0.0.1 only, so the gate is the only way in.
 
 **Cloudflare Tunnel**: route `globe.365securitymg.com` to `http://127.0.0.1:4180` (the gate,
-never 4173).
+never the map's own port).
 
 **Portal (VM 150)**, in `/etc/smg-portal.env`:
 

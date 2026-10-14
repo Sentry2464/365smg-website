@@ -1,0 +1,114 @@
+diff --git a/next.config.ts b/next.config.ts
+index f85264b..bb490d1 100644
+--- a/next.config.ts
++++ b/next.config.ts
+@@ -22,10 +22,7 @@ const nextConfig: NextConfig = {
+      WebAssembly engine from its own folder at run time: bundling it would
+      move the code away from the engine, so it stays a package, and the
+      standalone build is told to bring the two engine files along. */
+-  serverExternalPackages: ['ws', 'onnxruntime-web'],
+-  outputFileTracingIncludes: {
+-    '/api/**': ['./node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs', './node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm'],
+-  },
++  serverExternalPackages: ['ws'],
+   transpilePackages: ['react-map-gl', 'mapbox-gl', 'maplibre-gl'],
+   // Type errors block the build again. They were suppressed while 17 stood
+   // unfixed; those are cleared, so the gate can do its job — the AstraPanel
+@@ -62,10 +59,10 @@ const nextConfig: NextConfig = {
+       {
+         source: '/(.*)',
+         headers: [
+-          { key: 'Content-Security-Policy', value: "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: wss: data: blob:;" },
++          // 365 SMG client edition: the CSP (with frame-ancestors for the portal) is set in
++          // src/middleware.ts, and X-Frame-Options is dropped so the portal may frame the map.
+           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+           { key: 'X-Content-Type-Options', value: 'nosniff' },
+-          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+           { key: 'X-XSS-Protection', value: '1; mode=block' },
+         ],
+       },
+diff --git a/src/app/globals.css b/src/app/globals.css
+index cc33c75..43ffe99 100644
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -1,4 +1,3 @@
+-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+ @import "tailwindcss";
+ 
+ /* ═══════════════════════════════════════════════════════════════
+diff --git a/src/components/OsirisMap.tsx b/src/components/OsirisMap.tsx
+index 3f7ec11..c2a47fb 100644
+--- a/src/components/OsirisMap.tsx
++++ b/src/components/OsirisMap.tsx
+@@ -103,6 +103,8 @@ interface OsirisMapProps {
+   onOiFollow?: (following: boolean) => void;
+   /** What OI Assist has marked on the map: found things, named places, a searched area. */
+   oiHighlight?: Highlight | null;
++  /** 365 SMG client edition: an exact camera from the embedding page; a new ts re-applies it. */
++  cameraCommand?: { lat: number; lng: number; zoom: number; bearing: number; pitch: number; ts: number } | null;
+ }
+ 
+ function computeSolarTerminator(): [number, number][] {
+@@ -180,7 +182,7 @@ interface AlertPinFeature {
+   properties: AlertPinProps;
+ }
+ 
+-function OsirisMap({ data, activeLayers, onEntityClick, onMouseCoords, onRightClick, onViewStateChange, onReady, flyToLocation, alertPinIds = null, projection = 'globe', terrainEnabled = false, terrainRetry = 0, terrainFocus = 0, onTerrainStatusChange, mapStyle = 'dark', sweepData, scanTargets = [], demoMode = false, theme = 'core', drawnPolygons = [], arcgisLayers = [], drawMode = null, onDrawComplete, onDrawProgress, onDrawCancel, drawCommand = null, onMapCenter, route = null, userLocation = null, followUser = false, onFollowInterrupt, navigating = false, aircraftAirports = {}, onOiGlobe, onOiSelect, onOiHover, onOiFollow, oiHighlight = null }: OsirisMapProps) {
++function OsirisMap({ data, activeLayers, onEntityClick, onMouseCoords, onRightClick, onViewStateChange, onReady, flyToLocation, alertPinIds = null, projection = 'globe', terrainEnabled = false, terrainRetry = 0, terrainFocus = 0, onTerrainStatusChange, mapStyle = 'dark', sweepData, scanTargets = [], demoMode = false, theme = 'core', drawnPolygons = [], arcgisLayers = [], drawMode = null, onDrawComplete, onDrawProgress, onDrawCancel, drawCommand = null, onMapCenter, route = null, userLocation = null, followUser = false, onFollowInterrupt, navigating = false, aircraftAirports = {}, onOiGlobe, onOiSelect, onOiHover, onOiFollow, oiHighlight = null, cameraCommand = null }: OsirisMapProps) {
+   const containerRef = useRef<HTMLDivElement>(null);
+   const mapRef = useRef<maplibregl.Map | null>(null);
+   const popupRef = useRef<maplibregl.Popup | null>(null);
+@@ -2338,7 +2340,8 @@ function OsirisMap({ data, activeLayers, onEntityClick, onMouseCoords, onRightCl
+ 
+ 
+   useEffect(() => {
+-    if (!mapReady) return;
++    // 365 SMG client edition: conflict zones only when asked for (never, in the client map).
++    if (!mapReady || activeLayers.conflict_zones !== true) return;
+     // 🔴 CONFLICT ZONES - Live from /api/conflicts 🔴
+     let cancelled = false;
+     (async () => {
+@@ -2432,7 +2435,7 @@ function OsirisMap({ data, activeLayers, onEntityClick, onMouseCoords, onRightCl
+     setVis(['ship-dots','ship-label'], activeLayers.maritime);
+     setVis(['news-glow','news-dots','news-label'], activeLayers.live_news);
+     setVis(['alert-pin-glow','alert-pin-dots','alert-pin-label','alert-pin-pulse','alert-pin-selected'], activeLayers.alert_pins);
+-    setVis(['conflict-icons'], activeLayers.conflict_zones !== false);
++    setVis(['conflict-icons'], activeLayers.conflict_zones === true);
+ 
+     setVis(['balloon-dots','balloon-label'], activeLayers.balloons);
+     setVis(['rad-glow','rad-dots','rad-label'], activeLayers.radiation);
+@@ -2593,6 +2596,13 @@ function OsirisMap({ data, activeLayers, onEntityClick, onMouseCoords, onRightCl
+     return () => { map.off('moveend', open); };
+   }, [mapReady, flyToLocation]);
+ 
++  // 365 SMG client edition: the embedding page's camera.
++  useEffect(() => {
++    if (!mapReady || !mapRef.current || !cameraCommand) return;
++    const { lat, lng, zoom, bearing, pitch } = cameraCommand;
++    mapRef.current.easeTo({ center: [lng, lat], zoom, bearing, pitch, duration: 1200 });
++  }, [mapReady, cameraCommand]);
++
+   // 3D buildings are independent of the elevation renderer.
+   useEffect(() => {
+     if (!mapReady || !mapRef.current) return;
+diff --git a/src/lib/camera-catalog.ts b/src/lib/camera-catalog.ts
+index dd3c760..e5c8a40 100644
+--- a/src/lib/camera-catalog.ts
++++ b/src/lib/camera-catalog.ts
+@@ -8,7 +8,7 @@ export function mergeCameraCatalog<T extends { id: string | number }>(previous:
+ }
+ 
+ /** Recover slow regions without downloading the entire worldwide list again. */
+-export function loadCameraCatalog(onBatch: (cameras: CatalogCamera[]) => void, onError: () => void) {
++export function loadCameraCatalog(onBatch: (cameras: CatalogCamera[]) => void, onError: () => void, regions: string[] = ['all']) {
+   const controller = new AbortController();
+   let timer: ReturnType<typeof setTimeout> | undefined;
+   let attempts = 0;
+@@ -35,6 +35,6 @@ export function loadCameraCatalog(onBatch: (cameras: CatalogCamera[]) => void, o
+       timer = setTimeout(() => void load(remaining), attempts * 15_000);
+     }
+   };
+-  void load(['all']);
++  void load(regions);
+   return () => { controller.abort(); clearTimeout(timer); };
+ }

@@ -193,7 +193,7 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
               24/7 operations line: <b>{contact.phone}</b> · {contact.email}
             </span>
             <span className="cp-footer__right">
-              <span>Data: NWS, DHS, FBI, God&apos;s Eye layers</span>
+              <span>Data: NWS, NHC, DHS, FBI, FDLE, FDOT, USGS, NASA</span>
               <a href="#">Privacy</a>
               <a href="#">Terms</a>
             </span>

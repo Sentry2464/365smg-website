@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // OSIRIS client edition: built and checked by globe/osiris/build.sh.
+    "globe/**",
   ]),
 ]);
 

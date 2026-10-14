@@ -6,10 +6,11 @@ import { distanceMi } from '@/lib/geo'
 import type { Storm } from '@/server/storms'
 import { ALL_SITES, type Alert, type Site, type SiteId } from './data'
 
-// The intel map as God's Eye View (gods-eye-view), framed in embed mode. The globe runs
+// The intel map: the OSIRIS client edition (globe/osiris) or God's Eye View, framed in embed
+// mode; both speak the same protocol. The globe runs
 // on its own VM; the portal tells it what to show with gev:view messages: the camera on
 // the client's sites, their sites as pins, and the layers picked with the pills.
-// Protocol: docs/TOOLS.md "Embed mode" in the gods-eye-view repo.
+// Protocol: globe/osiris/overlay/src/lib/smg/embed.ts (and docs/TOOLS.md in gods-eye-view).
 
 const LAYERS = {
   Weather: ['weather-radar', 'weather-lightning'],
@@ -216,7 +217,7 @@ export function GlobeMap({
     <section className="cp-card cp-map cp-area-map" aria-labelledby="cp-map-title">
       <div className="cp-map__head">
         <h2 id="cp-map-title" className="cp-card__title">
-          Intel map · God&apos;s Eye
+          Intel map
         </h2>
         <div className="cp-pills" role="group" aria-label="Map layers">
           {(Object.keys(LAYERS) as Layer[]).map((l) => (
@@ -257,7 +258,7 @@ export function GlobeMap({
             <i className="cp-legend__site" />
             Your sites
           </span>
-          <span className="cp-legend__hint">Radar: NOAA · Hurricanes: NHC · Quakes: USGS · Flights: adsb.lol · Cameras: public DOT feeds</span>
+          <span className="cp-legend__hint">Weather: NWS, NOAA · Fires: NASA · Quakes: USGS · Flights: ADS-B · Cameras: FDOT (FL511)</span>
         </div>
         {layers.Cameras && !localCameras && (
           <p className="cp-meta cp-storms__note">No public cameras in this area yet.</p>

@@ -35,9 +35,14 @@ const FRAME_ANCESTORS = env('GATE_FRAME_ANCESTORS', 'https://portal.365securitym
 const MAX_TICKET_SECONDS = 300 // refuse tickets claiming a longer life than this
 const TICKETS_PER_MINUTE = Number(env('GATE_TICKETS_PER_MINUTE', '30')) // per client IP
 const TICKETS_PER_MINUTE_ALL = Number(env('GATE_TICKETS_PER_MINUTE_ALL', '600'))
-// Live camera video: how many cameras one client may stream at once (0 = no limit), which
-// requests count as streaming (path regex; the first group is the camera id), and how long
-// a stream counts as open after its last request (God's Eye drops idle streams after 15 s).
+// Live camera video is off: Cloudflare doesn't allow video through a Tunnel public hostname
+// on our plan (support confirmed it), and this gate sits behind one. Stream requests get 403
+// and clients use the camera panel's "Watch live on FL511" link instead. Only set this to 1
+// where the gate is not behind a Cloudflare public hostname (e.g. office network or VPN).
+const LIVE_VIDEO = env('GATE_LIVE_VIDEO', '0') === '1'
+// Live camera video, when on: how many cameras one client may stream at once (0 = no limit),
+// which requests count as streaming (path regex; the first group is the camera id), and how
+// long a stream counts as open after its last request (God's Eye drops idle streams after 15 s).
 const STREAMS_PER_CLIENT = Number(env('GATE_STREAMS_PER_CLIENT', '1'))
 const STREAM_PATH = new RegExp(env('GATE_STREAM_PATH', '^/api/cctv/(?:stream|media)/([^/?]+)'))
 const STREAM_IDLE_MS = Number(env('GATE_STREAM_IDLE_MS', '20000'))
@@ -303,6 +308,10 @@ const server = http.createServer((req, res) => {
 
   const session = readCookie(req.headers.cookie)
   if (!session) return deny(res, 403, 'Open the map from the 365 SMG Client Portal.')
+  if (!LIVE_VIDEO && STREAM_PATH.test(url.pathname)) {
+    res.writeHead(403, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+    return res.end(JSON.stringify({ error: 'live_video_off', message: 'Live video isn’t available here. Use “Watch live on FL511”.' }))
+  }
   const busy = streamConflict(session.cid, url.pathname, req.method)
   if (busy) {
     res.writeHead(429, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Retry-After': String(Math.ceil(STREAM_IDLE_MS / 1000)) })
@@ -340,7 +349,7 @@ server.headersTimeout = 20_000
 server.requestTimeout = 0 // streams (HLS) can be long; idle sockets still time out
 server.keepAliveTimeout = 65_000
 server.listen(LISTEN_PORT, LISTEN_HOST, () =>
-  log(`listening on ${LISTEN_HOST}:${LISTEN_PORT}, proxying to ${UPSTREAM.origin} as ${UPSTREAM_HOST}`),
+  log(`listening on ${LISTEN_HOST}:${LISTEN_PORT}, proxying to ${UPSTREAM.origin} as ${UPSTREAM_HOST}, live video ${LIVE_VIDEO ? 'on' : 'off'}`),
 )
 
 const stop = () => {

@@ -21,6 +21,24 @@ const freePort = () =>
     })
   })
 
+/** Starts the real gate on a free port in front of the fake God's Eye; resolves to its base URL. */
+async function startGate(extra: Record<string, string>) {
+  const port = await freePort()
+  const child = spawn(process.execPath, [path.resolve(__dirname, '../../../deploy/globe/gate.mjs')], {
+    env: {
+      ...process.env,
+      GATE_SECRET: SECRET,
+      GATE_PORT: String(port),
+      GATE_UPSTREAM: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`,
+      GATE_TICKETS_PER_MINUTE: '8',
+      ...extra,
+    },
+    stdio: ['ignore', 'pipe', 'inherit'],
+  })
+  await new Promise<void>((resolve) => child.stdout!.on('data', (d) => String(d).includes('listening') && resolve()))
+  return { child, base: `http://127.0.0.1:${port}` }
+}
+
 beforeAll(async () => {
   upstream = http.createServer((req, res) => {
     seen.push(req.headers)
@@ -33,22 +51,8 @@ beforeAll(async () => {
     socket.pipe(socket) // echo
   })
   await new Promise<void>((r) => upstream.listen(0, '127.0.0.1', r))
-  const upPort = (upstream.address() as AddressInfo).port
-  const port = await freePort()
-  gate = spawn(process.execPath, [path.resolve(__dirname, '../../../deploy/globe/gate.mjs')], {
-    env: {
-      ...process.env,
-      GATE_SECRET: SECRET,
-      GATE_PORT: String(port),
-      GATE_UPSTREAM: `http://127.0.0.1:${upPort}`,
-      GATE_TICKETS_PER_MINUTE: '8',
-      GATE_STREAM_IDLE_MS: '400',
-      GATE_STREAM_TAKEOVER_MS: '250',
-    },
-    stdio: ['ignore', 'pipe', 'inherit'],
-  })
-  await new Promise<void>((resolve) => gate.stdout!.on('data', (d) => String(d).includes('listening') && resolve()))
-  base = `http://127.0.0.1:${port}`
+  // Live video on here, to test the per-client limit; off by default (see the last cases).
+  ;({ child: gate, base } = await startGate({ GATE_LIVE_VIDEO: '1', GATE_STREAM_IDLE_MS: '400', GATE_STREAM_TAKEOVER_MS: '250' }))
 })
 
 afterAll(() => {
@@ -172,6 +176,27 @@ describe('globe gate', () => {
     for (let i = 0; i < 10; i++) statuses.push((await get('/?t=v1.bad.bad', { 'cf-connecting-ip': '198.51.100.7' })).status)
     expect(statuses.slice(0, 8).every((s) => s === 403)).toBe(true)
     expect(statuses.slice(8)).toEqual([429, 429])
+  })
+})
+
+describe('globe gate behind Cloudflare (default)', () => {
+  it('refuses live video, and still serves the map and camera stills', async () => {
+    const { child, base: off } = await startGate({})
+    try {
+      const at = (p: string, cookie = '') => fetch(off + p, { redirect: 'manual', headers: cookie ? { cookie } : {} })
+      const cookie = cookieOf(await at(`/?t=${globeTicket(SECRET, 'client-d')}`))!
+      const before = seen.length
+      for (const p of ['/api/cctv/stream/fdot-1', '/api/cctv/media/fdot-1/seg-3.ts?session=s', '/api/cctv/media/fdot-1']) {
+        const res = await at(p, cookie)
+        expect(res.status).toBe(403)
+        expect((await res.json()).error).toBe('live_video_off')
+      }
+      expect(seen.length).toBe(before) // never reached God's Eye
+      expect((await at('/api/cctv/frame/fdot-1', cookie)).status).toBe(200)
+      expect((await at('/?embed=1', cookie)).status).toBe(200)
+    } finally {
+      child.kill()
+    }
   })
 })
 

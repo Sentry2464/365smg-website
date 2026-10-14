@@ -242,7 +242,7 @@ export function GlobeMap({
             className="cp-globe__frame"
             allow="fullscreen"
             referrerPolicy="strict-origin"
-            sandbox="allow-scripts allow-same-origin allow-popups"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
             // gev:ready is sent once; if this component remounts after it, the globe's
             // listener is already up, so send the view shortly after load as well.
             onLoad={() => setTimeout(() => latestSend.current(), 1500)}

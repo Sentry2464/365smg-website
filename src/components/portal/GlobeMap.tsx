@@ -66,11 +66,11 @@ function cameraWithStorms(sites: Located[], storms: Storm[]) {
 
 
 /** Alerts with their own location (police calls) as pins, worst first, one per place and title. */
-function incidentPins(alerts: Alert[]) {
+function incidentPins(alerts: Alert[], nearby: boolean) {
   const seen = new Set<string>()
   const pins = []
   for (const a of alerts) {
-    if (a.lat == null || a.lng == null) continue
+    if (a.lat == null || a.lng == null || !!a.nearby !== nearby) continue
     const key = `${a.lat},${a.lng},${a.title}`
     if (seen.has(key)) continue
     seen.add(key)
@@ -180,7 +180,10 @@ export function GlobeMap({
     const site = siteId === ALL_SITES ? null : located.find((s) => s.id === siteId)
     return numbered.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && (!site || p.siteName === site.name))
   }, [showRegistry, registry, siteId, located])
-  const registryRoom = MAX_PINS - located.length
+  // The globe takes 24 marks. In order: the sites, alerts at the sites, registrants (in the
+  // card's order, so a dropped pin is always the farthest), then nearby context.
+  const atSitePins = useMemo(() => incidentPins(alerts, false), [alerts])
+  const registryRoom = Math.max(0, MAX_PINS - located.length - atSitePins.length)
   const activeStorms = layers.Hurricanes && storms?.length ? storms : null
 
   const send = useCallback(() => {
@@ -205,7 +208,7 @@ export function GlobeMap({
           label: (hit ? `${s.name} · ${hit.title}` : s.name).slice(0, 120),
           color,
         }
-      }), ...registryPins(registryPeople, registryRoom), ...incidentPins(alerts)].slice(0, MAX_PINS),
+      }), ...atSitePins, ...registryPins(registryPeople, registryRoom), ...incidentPins(alerts, true)].slice(0, MAX_PINS),
     }
     const id = `smg-${++seq.current}`
     const post = () => win.postMessage({ type: 'gev:view', id, view }, origin)
@@ -216,7 +219,7 @@ export function GlobeMap({
     retry.current = setTimeout(() => {
       if (lastAcked.current !== id && lastSent.current === id) post()
     }, 10_000)
-  }, [located, siteId, layers, origin, alerts, activeStorms, registryPeople, registryRoom])
+  }, [located, siteId, layers, origin, alerts, activeStorms, registryPeople, registryRoom, atSitePins])
 
   useEffect(() => () => clearTimeout(retry.current), [])
 

@@ -83,9 +83,11 @@ export interface ClientPortalProps {
   missing?: MissingList | null
   /** FDLE registry near the sites; only for opted-in clients. */
   registry?: RegistryView | null
+  /** Offer the Registry pins on the intel map (SMG_REGISTRY_MAP=0 hides them; the card stays). */
+  registryOnMap?: boolean
 }
 
-export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {}, globeUrl, storms = null, localCameras = false, wanted = [], missing = null, registry = null }: ClientPortalProps) {
+export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {}, globeUrl, storms = null, localCameras = false, wanted = [], missing = null, registry = null, registryOnMap = true }: ClientPortalProps) {
   // Last site this browser picked; ignored if it isn't one of this client's sites.
   const readSavedSite = useCallback((): SiteId | null => {
     try {
@@ -191,7 +193,7 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
 
           <div className="cp-dash">
             {globeUrl ? (
-              <GlobeMap siteId={siteId} url={globeUrl} alerts={feed.alerts} storms={storms} localCameras={localCameras} registry={registry} />
+              <GlobeMap siteId={siteId} url={globeUrl} alerts={feed.alerts} storms={storms} localCameras={localCameras} registry={registryOnMap ? registry : null} />
             ) : (
               <IntelMap siteId={siteId} incidents={feed.incidents} demo={feed.demo} />
             )}

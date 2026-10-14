@@ -88,6 +88,7 @@ export default async function PortalPage({
       wanted={wantedList(db())}
       missing={missingList(db())}
       registry={registry}
+      registryOnMap={process.env.SMG_REGISTRY_MAP !== '0'}
     />
   )
 }

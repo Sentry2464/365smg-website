@@ -12,6 +12,18 @@ through a Tunnel public hostname such as `globe.365securitymg.com`, so live vide
 | Staff | Directly from VM 151 on the office network or VPN (not built yet) | $0 |
 | Everyone | Stills, at most one FDOT fetch per camera per minute (`sidecar.mjs`) | $0 |
 
+## Status (14 Oct 2026)
+
+Installed: the FL511 link, the gate refusing God's Eye's own video, and the sidecar with stream
+addresses. **The Stream relay is not installed yet.** Step 0 found two blockers:
+
+- **Authorisation:** all 1,422 FDOT cameras with a stream are marked `isVideoAuthRequired`.
+  FDOT has to tell us how to access them (a token or header for `FDOT_VIDEO_HEADERS`, or our
+  public IP allow-listed).
+- **Network:** the streams come from `dis-*.divas.cloud` on TCP **8200**. VLAN 50 only allows
+  80/443/587/7844 out, so VM 151 needs a pfSense rule for TCP 8200 to `*.divas.cloud` (10.50.0.11
+  only), once FDOT confirms the access method and ports.
+
 ## How it works
 
 ```

@@ -14,7 +14,7 @@ SESSIONS=${GEV_HLS_SESSIONS:-5}
 FL511_LIVE_URL=${FL511_LIVE_URL:-https://fl511.com/cctv}
 
 [ -d "$GEV_DIR" ] || { echo "no God's Eye at $GEV_DIR" >&2; exit 1; }
-HEAD=$(git -C "$GEV_DIR" rev-parse --short=7 HEAD 2>/dev/null || echo unknown)
+HEAD=$(git -c safe.directory="$GEV_DIR" -C "$GEV_DIR" rev-parse --short=7 HEAD 2>/dev/null || echo unknown)
 if [ "$HEAD" != "$PINNED" ] && [ "${GEV_PATCH_ANY_VERSION:-}" != 1 ]; then
   echo "God's Eye is at $HEAD, these patches are for $PINNED. Review them against the new version," >&2
   echo "then rerun with GEV_PATCH_ANY_VERSION=1." >&2

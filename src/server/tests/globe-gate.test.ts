@@ -42,6 +42,7 @@ beforeAll(async () => {
       GATE_PORT: String(port),
       GATE_UPSTREAM: `http://127.0.0.1:${upPort}`,
       GATE_TICKETS_PER_MINUTE: '8',
+      GATE_STREAM_IDLE_MS: '400',
     },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
@@ -135,6 +136,20 @@ describe('globe gate', () => {
     const ok = await talk(true)
     expect(ok).toMatch(/^HTTP\/1.1 101/)
     expect(ok.endsWith('ping')).toBe(true)
+  })
+
+  it('lets each client stream one live camera at a time', async () => {
+    const a = cookieOf(await get(`/?t=${globeTicket(SECRET, 'client-a')}`))
+    const b = cookieOf(await get(`/?t=${globeTicket(SECRET, 'client-b')}`))
+    expect((await get('/api/cctv/stream/fdot-1', { cookie: a })).status).toBe(200)
+    expect((await get('/api/cctv/media/fdot-1/seg-3.ts', { cookie: a })).status).toBe(200) // same camera
+    const second = await get('/api/cctv/stream/fdot-2', { cookie: a })
+    expect(second.status).toBe(429)
+    expect(await second.json()).toEqual({ error: 'stream_limit', message: 'Close your other live camera first.', streaming: 'fdot-1' })
+    expect((await get('/api/cctv/stream/fdot-2', { cookie: b })).status).toBe(200) // another client
+    expect((await get('/api/cctv/frame/fdot-9', { cookie: a })).status).toBe(200) // stills don't count
+    await new Promise((r) => setTimeout(r, 500)) // the first stream goes idle
+    expect((await get('/api/cctv/stream/fdot-2', { cookie: a })).status).toBe(200)
   })
 
   it('rate-limits ticket checks per client IP', async () => {

@@ -35,6 +35,12 @@ const FRAME_ANCESTORS = env('GATE_FRAME_ANCESTORS', 'https://portal.365securitym
 const MAX_TICKET_SECONDS = 300 // refuse tickets claiming a longer life than this
 const TICKETS_PER_MINUTE = Number(env('GATE_TICKETS_PER_MINUTE', '30')) // per client IP
 const TICKETS_PER_MINUTE_ALL = Number(env('GATE_TICKETS_PER_MINUTE_ALL', '600'))
+// Live camera video: how many cameras one client may stream at once (0 = no limit), which
+// requests count as streaming (path regex; the first group is the camera id), and how long
+// a stream counts as open after its last request (God's Eye drops idle streams after 15 s).
+const STREAMS_PER_CLIENT = Number(env('GATE_STREAMS_PER_CLIENT', '1'))
+const STREAM_PATH = new RegExp(env('GATE_STREAM_PATH', '^/api/cctv/(?:stream|media)/([^/?]+)'))
+const STREAM_IDLE_MS = Number(env('GATE_STREAM_IDLE_MS', '20000'))
 
 // Separate keys for tickets and cookies, both from the one shared secret.
 const key = (label) => createHmac('sha256', SECRET).update(`gev-gate/${label}`).digest()
@@ -143,6 +149,34 @@ function allowTicketCheck(ip) {
 
 // The gate only listens on localhost behind cloudflared, so CF-Connecting-IP is Cloudflare's.
 const clientIp = (req) => String(req.headers['cf-connecting-ip'] ?? req.socket.remoteAddress ?? '?').slice(0, 64)
+
+// ---------- one live camera stream per client ----------
+
+// cid -> Map(cameraId -> last request time). Bandwidth is the limit: the office uplink is
+// shared, and each video stream is ~1.5 Mbps, so a client gets one camera at a time.
+const streams = new Map()
+setInterval(() => {
+  const cutoff = Date.now() - STREAM_IDLE_MS
+  for (const [cid, cams] of streams) {
+    for (const [cam, at] of cams) if (at < cutoff) cams.delete(cam)
+    if (cams.size === 0) streams.delete(cid)
+  }
+}, 5_000).unref()
+
+/** Null to go ahead, or the camera already streaming for this client. */
+function streamConflict(cid, path) {
+  if (STREAMS_PER_CLIENT <= 0) return null
+  const m = STREAM_PATH.exec(path)
+  if (!m) return null
+  const cam = decodeURIComponent(m[1])
+  const now = Date.now()
+  const cams = streams.get(cid) ?? new Map()
+  for (const [c, at] of cams) if (now - at >= STREAM_IDLE_MS) cams.delete(c)
+  if (!cams.has(cam) && cams.size >= STREAMS_PER_CLIENT) return [...cams.keys()][0]
+  cams.set(cam, now)
+  streams.set(cid, cams)
+  return null
+}
 
 // ---------- responses from the gate itself ----------
 
@@ -253,7 +287,13 @@ const server = http.createServer((req, res) => {
     return res.end()
   }
 
-  if (!readCookie(req.headers.cookie)) return deny(res, 403, 'Open the map from the 365 SMG Client Portal.')
+  const session = readCookie(req.headers.cookie)
+  if (!session) return deny(res, 403, 'Open the map from the 365 SMG Client Portal.')
+  const busy = streamConflict(session.cid, url.pathname)
+  if (busy) {
+    res.writeHead(429, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Retry-After': String(Math.ceil(STREAM_IDLE_MS / 1000)) })
+    return res.end(JSON.stringify({ error: 'stream_limit', message: 'Close your other live camera first.', streaming: busy }))
+  }
   proxy(req, res)
 })
 

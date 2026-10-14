@@ -21,6 +21,7 @@ const LAYERS = {
   Earthquakes: ['earthquakes'],
   Flights: ['flights'],
   Cameras: ['cctv'],
+  Satellites: ['satellites'],
 } as const
 type Layer = keyof typeof LAYERS
 
@@ -49,6 +50,13 @@ function cameraFor(sites: Located[], minAltitude = 25_000) {
   )
   const altitude_m = Math.round(Math.max(minAltitude, spreadKm * 3_000))
   return { lat, lon, altitude_m, heading_deg: 0, pitch_deg: -60 }
+}
+
+/** Camera far enough out to see the whole globe and the satellites around it. */
+function cameraForSatellites(sites: Located[]) {
+  const lat = sites.reduce((a, s) => a + s.lat, 0) / sites.length
+  const lon = sites.reduce((a, s) => a + s.lng, 0) / sites.length
+  return { lat, lon, altitude_m: 20_000_000, heading_deg: 0, pitch_deg: -90 }
 }
 
 /** Camera looking down on the sites and the storms together (at most 6,000 km up). */
@@ -152,6 +160,7 @@ export function GlobeMap({
     Earthquakes: true,
     Flights: false,
     Cameras: false,
+    Satellites: false,
   })
   const layers = useMemo(
     () => ({ ...picked, Hurricanes: hurricanes ?? (atlantic && !dismissed) }),
@@ -186,12 +195,15 @@ export function GlobeMap({
   const registryRoom = Math.max(0, MAX_PINS - located.length - atSitePins.length)
   const activeStorms = layers.Hurricanes && storms?.length ? storms : null
 
-  const send = useCallback(() => {
+  // home: the button "Back to my sites", which flies to the sites even with Satellites on.
+  const send = useCallback((home = false) => {
     const win = frame.current?.contentWindow
     if (!win || located.length === 0) return
     const focus = siteId === ALL_SITES ? located : located.filter((s) => s.id === siteId)
     const view = {
-      camera: activeStorms
+      camera: layers.Satellites && !home
+        ? cameraForSatellites(focus.length ? focus : located)
+        : activeStorms
         ? cameraWithStorms(focus.length ? focus : located, activeStorms)
         : cameraFor(focus.length ? focus : located, registryPeople.length ? 8_000 : 25_000),
       layers: (Object.keys(LAYERS) as Layer[]).filter((l) => layers[l]).flatMap((l) => LAYERS[l]),
@@ -211,7 +223,16 @@ export function GlobeMap({
       }), ...atSitePins, ...registryPins(registryPeople, registryRoom), ...incidentPins(alerts, true)].slice(0, MAX_PINS),
     }
     const id = `smg-${++seq.current}`
-    const post = () => win.postMessage({ type: 'gev:view', id, view }, origin)
+    // The sites, for a followed satellite's distance and direction (God's Eye patch 4).
+    const sitesMessage = {
+      type: 'smg:sites',
+      sites: located.map((s) => ({ name: s.name, lat: s.lat, lng: s.lng })),
+      selected: siteId === ALL_SITES ? null : (focus[0]?.name ?? null),
+    }
+    const post = () => {
+      win.postMessage(sitesMessage, origin)
+      win.postMessage({ type: 'gev:view', id, view }, origin)
+    }
     lastSent.current = id
     post()
     // Each view replaces the last one; resend once if the globe doesn't acknowledge it.
@@ -316,7 +337,7 @@ export function GlobeMap({
           <iframe
             ref={frame}
             src={embedUrl.toString()}
-            title="Map of your sites with weather, hurricanes, fires, earthquakes, flights and cameras"
+            title="Map of your sites with weather, hurricanes, fires, earthquakes, flights, cameras and satellites"
             className="cp-globe__frame"
             allow="fullscreen"
             referrerPolicy="strict-origin"
@@ -325,6 +346,12 @@ export function GlobeMap({
             // listener is already up, so send the view shortly after load as well.
             onLoad={() => setTimeout(() => latestSend.current(), 1500)}
           />
+          {ready && (
+            // Re-sending the view stops following a satellite, flight or camera and flies back.
+            <button type="button" className="cp-globe__home" onClick={() => send(true)}>
+              ⌖ Back to my sites
+            </button>
+          )}
           {!ready && (
             <p className="cp-globe__status" role="status">
               {failed ? 'The map is unavailable right now. Your alerts below are unaffected.' : 'Loading map…'}
@@ -336,7 +363,7 @@ export function GlobeMap({
             <i className="cp-legend__site" />
             Your sites
           </span>
-          <span className="cp-legend__hint">Weather: NWS, NOAA · Fires: NASA · Quakes: USGS · Flights: ADS-B · Cameras: FDOT (FL511)</span>
+          <span className="cp-legend__hint">Weather: NWS, NOAA · Fires: NASA · Quakes: USGS · Flights: ADS-B · Cameras: FDOT (FL511) · Satellites: CelesTrak</span>
         </div>
         {layers.Cameras && !localCameras && (
           <p className="cp-meta cp-storms__note">No public cameras in this area yet.</p>

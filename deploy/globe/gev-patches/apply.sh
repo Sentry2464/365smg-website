@@ -136,4 +136,46 @@ if (out === src) { console.log('clickable Registry pins already in place'); proc
 fs.writeFileSync(file, out)
 console.log(`clickable Registry pins (${file})`)
 JS
+# 4. Followed satellites: plain-language orbit facts on the card (speed, orbit time, altitude
+#    range, tilt) and the distance and direction from the client's site, which the portal sends
+#    with each view ({type: 'smg:sites'}). Adds src/smg/satellites.js. Browser code: rebuild.
+HERE=$(cd "$(dirname "$0")" && pwd)
+install -d "$GEV_DIR/src/smg"
+install -m 644 "$HERE/files/smg-satellites.js" "$GEV_DIR/src/smg/satellites.js"
+chown --reference="$GEV_DIR/src" "$GEV_DIR/src/smg" "$GEV_DIR/src/smg/satellites.js" 2>/dev/null || true
+FILE="$GEV_DIR/src/layers/satellites/tracking.js"
+node - "$FILE" <<'JS'
+const fs = require('node:fs')
+const [file] = process.argv.slice(2)
+const src = fs.readFileSync(file, 'utf8')
+const IMPORT = "import { smgSatelliteFacts } from '../../smg/satellites.js'; // 365 SMG patch 4\n"
+const CESIUM = "import * as Cesium from 'cesium';\n"
+const BEGIN = '    // 365 SMG patch 4 begin'
+const END = '    // 365 SMG patch 4 end\n'
+const block = `${BEGIN}: orbit facts, and distance and direction from the client's site.
+    details.push(
+      ...smgSatelliteFacts(
+        Cesium,
+        sat?.satrec,
+        layerState._trackedFrameGeo,
+        layerState._trackedFrameGeo ? layerState._trackedFrameCartesian : null,
+      ),
+    );
+${END}`
+const ANCHOR = '    ];\n    // Docked companions are consolidated onto the tracked card as SECONDARY info\n'
+let out = src
+if (!out.includes(IMPORT)) {
+  if (!out.startsWith(CESIUM)) { console.error(`expected ${file} to start with the Cesium import`); process.exit(1) }
+  out = CESIUM + IMPORT + out.slice(CESIUM.length)
+}
+if (out.includes(BEGIN)) {
+  out = out.slice(0, out.indexOf(BEGIN)) + block + out.slice(out.indexOf(END) + END.length)
+} else {
+  if (out.split(ANCHOR).length !== 2) { console.error(`satellite card anchor not found once in ${file}`); process.exit(1) }
+  out = out.replace(ANCHOR, '    ];\n' + block + ANCHOR.slice('    ];\n'.length))
+}
+if (out === src) { console.log('satellite facts already in place'); process.exit(0) }
+fs.writeFileSync(file, out)
+console.log(`satellite facts (${file})`)
+JS
 echo "Done. Rebuild God's Eye (npm run build, as its own user), then restart it."

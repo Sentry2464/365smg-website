@@ -1888,6 +1888,32 @@ textarea.cp-input {
 .cp-map--globe .cp-map__canvas {
   height: clamp(460px, 68vh, 820px);
 }
+.cp-globe__home {
+  position: absolute;
+  /* Top left: the map's data credits (Cesium, Esri) sit at the bottom and must stay visible. */
+  left: 12px;
+  top: 12px;
+  z-index: 2;
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(18, 18, 43, 0.82);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.cp-globe__home:hover,
+.cp-globe__home:focus-visible {
+  background: rgba(18, 18, 43, 0.95);
+}
+.cp-map--globe .cp-map__head .cp-card__title {
+  white-space: nowrap;
+}
+.cp-map--globe .cp-pills {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 .cp-map__full {
   flex: none;
   padding: 6px 14px;
@@ -1934,6 +1960,11 @@ textarea.cp-input {
 @media (max-width: 699px) {
   .cp-map--globe .cp-map__canvas {
     height: 300px;
+  }
+  /* Phones keep the one-line, side-scrolling button row. */
+  .cp-map--globe .cp-pills {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
   }
   .cp-map--full .cp-map__canvas {
     height: auto;

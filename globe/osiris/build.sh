@@ -7,6 +7,11 @@
 #
 # OUT_DIR then holds a ready-to-run app: node OUT_DIR/server.js (see README.md).
 set -euo pipefail
+# Upstream code (its tests and build) runs here: never as root.
+if [ "$(id -u)" = 0 ] && [ "${ALLOW_ROOT:-}" != 1 ]; then
+  echo "run build.sh as an unprivileged user (it runs upstream code)" >&2
+  exit 1
+fi
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=UPSTREAM
 . "$HERE/UPSTREAM"
@@ -24,8 +29,11 @@ git rm -rq -- $(cat "$HERE/remove.txt")
 git apply --whitespace=nowarn "$HERE/upstream.patch"
 cp -R "$HERE/overlay/." .
 
-echo "==> install, test, build"
-npm ci --no-audit --no-fund
+echo "==> install (lockfile only, no package install scripts), test, build"
+# --ignore-scripts: no dependency runs code at install time. The one script the build
+# needs, tools/prepare-map-worker.mjs (copies MapLibre's worker into public/), runs as
+# npm's prebuild step and is part of the reviewed source.
+npm ci --ignore-scripts --no-audit --no-fund
 npx vitest run
 npm run build
 

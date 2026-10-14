@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
+import { viaOurServer } from '@/lib/camera-preview';
 
 export interface SnapshotCamera {
   id: string;
@@ -11,11 +12,12 @@ export interface SnapshotCamera {
   feed_url?: string;
 }
 
-const REFRESH_MS = 15_000;
+// Our server fetches each FDOT still at most once a minute, so asking more often adds nothing.
+const REFRESH_MS = 60_000;
 
 /**
- * A camera's current still, refreshed every 15 seconds. The image comes straight from the
- * camera owner's site (FDOT's fl511.com for Florida); nothing is recorded or stored.
+ * A camera's current still, refreshed every minute. FDOT stills come through our server
+ * (/api/smg/fdot-snapshot), not from each viewer's browser; nothing is recorded.
  */
 export default function CameraSnapshot({ camera, onClose }: { camera: SnapshotCamera; onClose: () => void }) {
   const [tick, setTick] = useState(0);
@@ -33,9 +35,8 @@ export default function CameraSnapshot({ camera, onClose }: { camera: SnapshotCa
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const src = camera.feed_url
-    ? `${camera.feed_url}${camera.feed_url.includes('?') ? '&' : '?'}_=${tick}`
-    : null;
+  const base = camera.feed_url ? viaOurServer(camera.feed_url) : null;
+  const src = base ? `${base}${base.includes('?') ? '&' : '?'}_=${tick}` : null;
 
   return (
     <div
@@ -60,7 +61,7 @@ export default function CameraSnapshot({ camera, onClose }: { camera: SnapshotCa
       ) : (
         <p className="px-3 pb-3 text-[11px] text-[var(--text-secondary)]">This camera’s picture isn’t available right now.</p>
       )}
-      <p className="px-3 py-1.5 text-[9px] text-[var(--text-secondary)]">Refreshes every 15 seconds.</p>
+      <p className="px-3 py-1.5 text-[9px] text-[var(--text-secondary)]">Updates every minute.</p>
     </div>
   );
 }

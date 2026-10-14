@@ -27,6 +27,35 @@ index f85264b..bb490d1 100644
            { key: 'X-XSS-Protection', value: '1; mode=block' },
          ],
        },
+diff --git a/src/app/api/cctv/route.test.ts b/src/app/api/cctv/route.test.ts
+index 41bf0a4..4167ffe 100644
+--- a/src/app/api/cctv/route.test.ts
++++ b/src/app/api/cctv/route.test.ts
+@@ -12,7 +12,8 @@ const flushIO = () => vi.advanceTimersByTimeAsync(0);
+ vi.mock('@/lib/stealthFetch', () => ({ stealthFetch: vi.fn(), stealthHeaders: vi.fn(() => ({})) }));
+ /* Keep these cases on the live fetch path; a saved catalogue would answer
+    for them before any upstream was asked. */
+-beforeEach(() => { process.env.OSIRIS_CCTV_SNAPSHOT = 'off'; vi.useFakeTimers(); vi.resetAllMocks(); clearSourceCache(); clearCctvRefreshes(); });
++// 365 SMG client edition: these cases use other regions than the client default (Florida).
++beforeEach(() => { process.env.OSIRIS_CCTV_REGIONS = 'all'; process.env.OSIRIS_CCTV_SNAPSHOT = 'off'; vi.useFakeTimers(); vi.resetAllMocks(); clearSourceCache(); clearCctvRefreshes(); });
+ /* Drain first: a mock that never settles is holding a pool slot, and the pool
+    is module state shared with the next case. */
+ afterEach(async () => { await flushIO(); await vi.advanceTimersByTimeAsync(30_000); vi.useRealTimers(); });
+diff --git a/src/app/api/cctv/route.ts b/src/app/api/cctv/route.ts
+index 0df07d9..84ca054 100644
+--- a/src/app/api/cctv/route.ts
++++ b/src/app/api/cctv/route.ts
+@@ -951,6 +951,10 @@ export async function GET(request: Request) {
+       // Default: load all regions for global coverage
+       regionsToFetch = Object.keys(REGION_FETCHERS);
+     }
++    // 365 SMG client edition: only the camera networks we have permission to show
++    // (OSIRIS_CCTV_REGIONS, comma-separated; default Florida's FDOT network).
++    const permitted = (process.env.OSIRIS_CCTV_REGIONS || 'florida').split(',').map(r => r.trim());
++    if (!permitted.includes('all')) regionsToFetch = regionsToFetch.filter(r => permitted.includes(r));
+ 
+     if (regionsToFetch.length === ALL_REGIONS().length) {
+       const ready = getPayload();
 diff --git a/src/app/globals.css b/src/app/globals.css
 index cc33c75..43ffe99 100644
 --- a/src/app/globals.css
@@ -112,3 +141,36 @@ index dd3c760..e5c8a40 100644
 +  void load(regions);
    return () => { controller.abort(); clearTimeout(timer); };
  }
+diff --git a/src/lib/camera-preview.ts b/src/lib/camera-preview.ts
+index 9e0cb33..90e89ae 100644
+--- a/src/lib/camera-preview.ts
++++ b/src/lib/camera-preview.ts
+@@ -48,13 +48,27 @@ export function previewMedia(cam: PreviewSource): { kind: PreviewKind; url: stri
+ 
+   if (declared === 'jpg') {
+     const url = cam.feed_url?.trim() || cam.stream_url?.trim();
+-    return url ? { kind: 'jpg', url } : null;
++    return url ? { kind: 'jpg', url: viaOurServer(url) } : null;
+   }
+ 
+   // iframe, and anything unrecognised.
+   return null;
+ }
+ 
++/**
++ * 365 SMG client edition: FDOT stills are fetched by our server (at most once a minute per
++ * camera, identified as us) rather than by each viewer's browser. See /api/smg/fdot-snapshot.
++ */
++export function viaOurServer(url: string): string {
++  try {
++    const host = new URL(url).hostname.toLowerCase();
++    if (host === 'fl511.com' || host.endsWith('.fl511.com')) return `/api/smg/fdot-snapshot?url=${encodeURIComponent(url)}`;
++  } catch {
++    // not an absolute URL: leave it
++  }
++  return url;
++}
++
+ /** Cache-buster: snapshot feeds are one URL that returns a new frame each time. */
+ export function freshen(url: string): string {
+   return url.includes('?') ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`;

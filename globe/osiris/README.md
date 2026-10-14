@@ -18,9 +18,18 @@ The map only, with the layers the portal's pills switch:
 | Flights | `flights` | adsb.fi, OpenSky |
 | Cameras | `cctv`, `cctv_previews` | **FDOT FL511** (about 4,950 cameras, snapshots), with FDOT's approval |
 
-Clicking a camera opens its current still, refreshed every 15 seconds. Stills load from
-fl511.com and nothing is recorded. Camera regions: `NEXT_PUBLIC_CCTV_REGIONS` at build time,
-default `florida`.
+Clicking a camera opens its current still, updated every minute. Per the FDOT arrangement:
+
+- **One server:** stills are fetched by our server (`/api/smg/fdot-snapshot`), never by
+  viewers' browsers. Each camera is fetched at most once a minute, shared by every viewer.
+- **Identified:** every request says who we are (`OSIRIS_USER_AGENT`, default
+  `365SMG-IntelMap (globe.365securitymg.com; admin@365securitymg.com)`).
+- **Nothing kept:** no still is stored beyond the current one.
+- **Not an open proxy:** the route fetches only URLs in FDOT's own camera list.
+- **Florida only:** the server serves only permitted camera networks (`OSIRIS_CCTV_REGIONS`,
+  default `florida`). The page asks for `NEXT_PUBLIC_CCTV_REGIONS`, also `florida`.
+
+FDOT's camera list itself is fetched by the server and cached for 30 minutes.
 
 The portal's site pins show as labelled markers (one colour; OSIRIS has no per-pin colours).
 There's no radar, lightning or NHC cone layer in OSIRIS.
@@ -34,11 +43,15 @@ reached even by URL:
 - "Marauder", a Web Bluetooth scanner that talks to devices near the viewer;
 - the OSINT/recon panel (leaked credentials, phone and username lookups, Shodan, port scans);
 - the AI analyst and "OI" assistant (Gemini and other model providers), and the MCP server;
+- the "stealth" fetch, which sent random browser user agents and spoofed residential
+  `X-Forwarded-For` addresses to data providers. It's replaced by one that identifies us;
+- the camera image proxies (`/api/cctv/proxy`, `frame`, `resolve`, `stream-status`), which
+  posed as a Chrome browser;
 - the analytics middleware, which reported every request with the visitor's IP to an Umami
   server; IP geolocation (sent visitor IPs to ipapi.co, freeipapi.com and ip-api.com over
   plain HTTP); Google Fonts; the splash screen, docs and privacy pages, Docker and nginx files.
 
-Server routes left: `/api/cctv*`, `weather`, `fires`, `flights`, `aircraft`, `flight-route`,
+Server routes left: `/api/cctv`, `/api/smg/fdot-snapshot`, `weather`, `fires`, `flights`, `aircraft`, `flight-route`,
 `satellites`, `proxy-tiles` (basemap) and `health`.
 
 ## Our changes
@@ -62,11 +75,19 @@ waiting for the portal.
 
 ## Build
 
-Needs Node 20 or newer, git and network access to GitHub and npm.
+Needs Node 20 or newer, git and network access to GitHub and npm. Run it as an ordinary
+user, not root: it runs upstream code (tests and build).
 
 ```bash
 globe/osiris/build.sh /tmp/osiris-build      # clones, trims, tests (vitest), builds
 ```
+
+Supply chain:
+- **Pinned upstream:** the exact commit in `UPSTREAM`.
+- **Exact dependencies:** installed with `npm ci` from upstream's lockfile.
+- **No install scripts:** `--ignore-scripts` stops any package running code at install time.
+- **One build script:** `tools/prepare-map-worker.mjs` only copies MapLibre's worker into
+  `public/`.
 
 ## Install on VM 151
 

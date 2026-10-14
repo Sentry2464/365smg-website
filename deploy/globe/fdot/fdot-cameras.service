@@ -1,0 +1,35 @@
+[Unit]
+Description=FDOT traffic cameras for God's Eye View (365 SMG)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+# The last good camera list, so a restart works while fl511.com is down.
+StateDirectory=fdot-cameras
+ExecStart=/usr/bin/node /opt/fdot-cameras/sidecar.mjs
+Environment=FDOT_LISTEN=127.0.0.1
+Environment=FDOT_PORT=4185
+Environment=FDOT_STATE_FILE=/var/lib/fdot-cameras/cameras.json
+# Optional: FDOT_COUNTIES, FDOT_BOUNDS, FDOT_PUBLIC_BASE, FDOT_SOURCE_KIND (see README.md).
+EnvironmentFile=-/etc/fdot-cameras.env
+Restart=on-failure
+RestartSec=5
+SuccessExitStatus=143
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

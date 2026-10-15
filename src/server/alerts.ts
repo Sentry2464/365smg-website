@@ -433,6 +433,54 @@ export const crimeRadius = () => Number(process.env.SMG_CRIME_RADIUS_MI) || 1
 export const maxCrimeRadius = () => Math.max(crimeRadius(), Number(process.env.SMG_CRIME_MAX_RADIUS_MI) || 10)
 const NEARBY_COUNT = () => Number(process.env.SMG_NEARBY_COUNT) || 5
 
+// ---------- threat level ----------
+//
+// The worst alert at the site sets the floor (HIGH, or ELEVATED for MED). On top, a score
+// adds up the alerts at the site and the closest nearby ones, so clusters count, and closer
+// incidents count more: each adds its severity weight times a closeness factor that halves
+// at THREAT_HALF_MI (police calls) or 10 mi (weather areas). A score of THREAT_ELEVATED or
+// more makes the level at least ELEVATED; THREAT_HIGH or more, HIGH.
+//
+//   one MED call 1.1 mi away      2 × 0.77                 = 1.5  → LOW
+//   one HIGH call 1.2 mi away     3 × 0.74                 = 2.2  → ELEVATED
+//   three MED calls 1.5–2 mi      2 × (0.64 + 0.5 + 0.5)   = 3.3  → ELEVATED
+//   four MED calls 5–7 mi         2 × (0.12 + … + 0.07)    ≈ 0.7  → LOW
+//   a warning area 5 mi away      3 × 0.8                  = 2.4  → ELEVATED
+export const THREAT_WEIGHT: Record<Severity, number> = { HIGH: 3, MED: 2, LOW: 0.5 }
+export const THREAT_ELEVATED = 2
+export const THREAT_HIGH = 6
+/** Nearby alerts counted in the score: the closest few, as the dashboard lists them. */
+const SCORED_NEARBY = 5
+const halfMi = (source: string) => (source === 'opd' ? Number(process.env.SMG_THREAT_HALF_MI) || 2 : 10)
+
+/** 1 at the site; for nearby alerts, less the further away (½ at the source's half distance). */
+export function closeness(r: AlertRow) {
+  if (atSite(r)) return 1
+  const d = r.distance_mi ?? 0
+  return 1 / (1 + (d / halfMi(r.source)) ** 2)
+}
+
+/** The weighted score for one site's alert rows (see above). */
+export function threatScore(rows: AlertRow[]) {
+  const nearby = rows
+    .filter((r) => !atSite(r))
+    .sort((a, b) => (a.distance_mi ?? 0) - (b.distance_mi ?? 0))
+    .slice(0, SCORED_NEARBY)
+  return [...rows.filter(atSite), ...nearby].reduce((sum, r) => sum + THREAT_WEIGHT[r.severity] * closeness(r), 0)
+}
+
+const LEVEL_RANK: Record<ThreatLevel, number> = { LOW: 0, ELEVATED: 1, HIGH: 2 }
+const higher = (a: ThreatLevel, b: ThreatLevel) => (LEVEL_RANK[b] > LEVEL_RANK[a] ? b : a)
+
+/** One site's threat level from all its alert rows: the at-site floor, raised by the score. */
+export function threatLevel(rows: AlertRow[]): ThreatLevel {
+  const here = rows.filter(atSite)
+  const worst = here.reduce<Severity>((w, r) => (RANK[r.severity] > RANK[w] ? r.severity : w), 'LOW')
+  const floor: ThreatLevel = here.length ? THREAT[worst] : 'LOW'
+  const score = threatScore(rows)
+  return higher(floor, score >= THREAT_HIGH ? 'HIGH' : score >= THREAT_ELEVATED ? 'ELEVATED' : 'LOW')
+}
+
 /** Whether an alert row is at the site itself (vs. nearby context). */
 function atSite(r: AlertRow) {
   if (r.distance_mi == null) return true // area alerts that cover the site, national advisories
@@ -497,16 +545,16 @@ export function liveFeed(sites: Site[], rows: AlertRow[], now = new Date()): Fee
   )
 
   const summaries: Record<string, SiteSummary> = {}
-  const summarize = (list: Alert[]): SiteSummary => {
-    const counted = list.filter((a) => !a.nearby)
-    const worst = counted.reduce<Severity>((w, a) => (RANK[a.severity] > RANK[w] ? a.severity : w), 'LOW')
-    return {
-      threatLevel: counted.length ? THREAT[worst] : 'LOW',
-      activeAlertId: counted.find((a) => a.severity === 'HIGH')?.id ?? null,
+  const banner = (list: Alert[]) => list.find((a) => !a.nearby && a.severity === 'HIGH')?.id ?? null
+  for (const s of sites)
+    summaries[s.id] = {
+      threatLevel: threatLevel(rows.filter((r) => r.site_id === s.id)),
+      activeAlertId: banner(alerts.filter((a) => a.siteId === null || a.siteId === s.id)),
     }
+  summaries[ALL_SITES] = {
+    threatLevel: sites.reduce<ThreatLevel>((lvl, s) => higher(lvl, summaries[s.id].threatLevel), 'LOW'),
+    activeAlertId: banner(alerts),
   }
-  for (const s of sites) summaries[s.id] = summarize(alerts.filter((a) => a.siteId === null || a.siteId === s.id))
-  summaries[ALL_SITES] = summarize(alerts)
 
   const incidents: MapIncident[] = []
   for (const s of sites) {

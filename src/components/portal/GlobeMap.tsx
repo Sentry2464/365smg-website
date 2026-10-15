@@ -73,8 +73,13 @@ function cameraWithStorms(sites: Located[], storms: Storm[]) {
 }
 
 
+const distanceText = (a: Alert, siteNames: Map<string, string>) => {
+  const site = a.siteId ? siteNames.get(a.siteId) : undefined
+  return a.distanceMi != null && site ? ` · ${a.distanceMi} mi from ${site}` : ''
+}
+
 /** Alerts with their own location (police calls) as pins, worst first, one per place and title. */
-function incidentPins(alerts: Alert[], nearby: boolean) {
+export function incidentPins(alerts: Alert[], nearby: boolean, siteNames: Map<string, string>) {
   const seen = new Set<string>()
   const pins = []
   for (const a of alerts) {
@@ -86,7 +91,8 @@ function incidentPins(alerts: Alert[], nearby: boolean) {
       type: 'pin',
       latitude: a.lat,
       longitude: a.lng,
-      label: `${a.nearby ? 'Nearby: ' : ''}${a.title} · ${a.source}`.slice(0, 120),
+      // With its distance from the site it was matched to: "Vandalism · 5.4 mi from RCP Community".
+      label: `${a.nearby ? 'Nearby: ' : ''}${a.title}${distanceText(a, siteNames)} · ${a.source}`.slice(0, 120),
       // Nearby context in a muted colour; at-site alerts by severity.
       color: a.nearby ? 'green' : a.severity === 'HIGH' ? 'red' : 'amber',
     })
@@ -195,7 +201,8 @@ export function GlobeMap({
   }, [showRegistry, registry, siteId, located])
   // The globe takes 24 marks. In order: the sites, alerts at the sites, registrants (in the
   // card's order, so a dropped pin is always the farthest), then nearby context.
-  const atSitePins = useMemo(() => incidentPins(mapAlerts, false), [mapAlerts])
+  const siteNames = useMemo(() => new Map(sites.map((s) => [s.id, s.name])), [sites])
+  const atSitePins = useMemo(() => incidentPins(mapAlerts, false, siteNames), [mapAlerts, siteNames])
   const registryRoom = Math.max(0, MAX_PINS - located.length - atSitePins.length)
   const activeStorms = layers.Hurricanes && storms?.length ? storms : null
 
@@ -224,7 +231,7 @@ export function GlobeMap({
           label: (hit ? `${s.name} · ${hit.title}` : s.name).slice(0, 120),
           color,
         }
-      }), ...atSitePins, ...registryPins(registryPeople, registryRoom), ...incidentPins(mapAlerts, true)].slice(0, MAX_PINS),
+      }), ...atSitePins, ...registryPins(registryPeople, registryRoom), ...incidentPins(mapAlerts, true, siteNames)].slice(0, MAX_PINS),
     }
     const id = `smg-${++seq.current}`
     // The sites, for a followed satellite's distance and direction (God's Eye patch 4).
@@ -244,7 +251,7 @@ export function GlobeMap({
     retry.current = setTimeout(() => {
       if (lastAcked.current !== id && lastSent.current === id) post()
     }, 10_000)
-  }, [located, siteId, layers, origin, mapAlerts, activeStorms, registryPeople, registryRoom, atSitePins])
+  }, [located, siteId, layers, origin, mapAlerts, activeStorms, registryPeople, registryRoom, atSitePins, siteNames])
 
   useEffect(() => () => clearTimeout(retry.current), [])
 

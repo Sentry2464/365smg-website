@@ -1,7 +1,7 @@
 import type { Database } from 'better-sqlite3'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ALL_SITES, type Site } from '@/components/portal/data'
-import { clientAlerts, liveFeed, milesToArea, nwsSeverity, parseNws, pollNws, syncSiteAlerts } from '../alerts'
+import { clientAlerts, liveFeed, milesToArea, nwsSeverity, parseNws, pollNws, syncSiteAlerts, threatLevel, threatScore, type AlertRow } from '../alerts'
 import { openDatabase } from '../core.mjs'
 import { createClient, createSite } from '../store'
 
@@ -189,6 +189,53 @@ describe('nearby tier', () => {
     syncSiteAlerts(db, 'nws', site, [here, { ...far, distanceMi: 12 }])
     const feed = liveFeed([toSite(site)], clientAlerts(db, c.id))
     expect(feed.alerts.map((a) => [a.title.split(' ')[0], !!a.nearby])).toEqual([['Heat', false]])
+  })
+})
+
+describe('threat level', () => {
+  const row = (severity: 'HIGH' | 'MED' | 'LOW', distance: number | null, source = 'opd', id = `${severity}${distance}${Math.random()}`): AlertRow => ({
+    alert_id: id,
+    site_id: 's1',
+    source,
+    event: 'x',
+    severity,
+    headline: 'x',
+    url: '',
+    starts_at: null,
+    ends_at: null,
+    first_seen_at: '2026-01-01T00:00:00Z',
+    distance_mi: distance,
+    lat: null,
+    lng: null,
+  })
+
+  it('keeps the at-site floor: the worst alert at the site', () => {
+    expect(threatLevel([])).toBe('LOW')
+    expect(threatLevel([row('MED', 0.5)])).toBe('ELEVATED')
+    expect(threatLevel([row('HIGH', 0.9)])).toBe('HIGH')
+    expect(threatLevel([row('MED', null, 'ntas')])).toBe('ELEVATED')
+  })
+
+  it('counts nearby incidents, closer ones more', () => {
+    expect(threatLevel([row('MED', 1.1)])).toBe('LOW') // one MED just past the site radius
+    expect(threatLevel([row('HIGH', 1.2)])).toBe('ELEVATED') // one HIGH that close
+    expect(threatLevel([row('HIGH', 6)])).toBe('LOW') // the same, far away
+    expect(threatScore([row('MED', 1.5)])).toBeGreaterThan(threatScore([row('MED', 3)]))
+    // The dashboard case: four MED calls 5–7 miles out stay LOW.
+    expect(threatLevel([row('MED', 5.4), row('MED', 6.6), row('MED', 6.8), row('MED', 7.3)])).toBe('LOW')
+  })
+
+  it('counts clusters', () => {
+    expect(threatLevel([row('MED', 1.5), row('MED', 2), row('MED', 2)])).toBe('ELEVATED')
+    // A cluster at the site raises ELEVATED to HIGH.
+    expect(threatLevel([row('MED', 0.2), row('MED', 0.5), row('MED', 0.8)])).toBe('HIGH')
+    // Only the closest five nearby count, so a busy city 8–10 miles out doesn't add up.
+    expect(threatLevel(Array.from({ length: 40 }, (_, i) => row('MED', 8 + (i % 3))))).toBe('LOW')
+  })
+
+  it('weighs weather areas on a wider scale', () => {
+    expect(threatLevel([row('HIGH', 5, 'nws')])).toBe('ELEVATED') // a warning 5 mi away
+    expect(threatLevel([row('HIGH', 11, 'nws')])).toBe('LOW')
   })
 })
 

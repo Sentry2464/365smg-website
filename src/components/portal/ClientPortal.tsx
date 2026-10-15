@@ -162,7 +162,11 @@ export function ClientPortal({ user, client, sites, feed, updatedAt, preview = {
               </h1>
             </div>
             <div className="cp-status">
-              <span className="cp-statchip" style={{ borderColor: `var(--sev-${threat.toLowerCase()})` }}>
+              <span
+                className="cp-statchip"
+                style={{ borderColor: `var(--sev-${threat.toLowerCase()})` }}
+                title="From the alerts at your sites and the incidents close by: the worst alert at a site, raised by clusters, with closer incidents counting more."
+              >
                 <i style={{ color: `var(--sev-${threat.toLowerCase()})` }} aria-hidden="true" />
                 Threat level:
                 <b style={{ color: `var(--sev-${threat.toLowerCase()})` }}>{threat}</b>

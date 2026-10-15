@@ -216,17 +216,35 @@ each client only the alerts at or near their own sites (sites need coordinates).
 
 **Nearby.** When nothing is active at a site, its dashboard shows the nearest few items
 further out (`SMG_NEARBY_COUNT`, default 5), marked "nearby" with their distance, so
-clients still see what's happening around them. Nearby items never raise the threat level
-or the banner. Ranges: weather warnings up to `SMG_WEATHER_NEARBY_MI` (default 50) from
+clients still see what's happening around them. Nearby items never trigger the banner, but
+they count toward the threat level (below). Ranges: weather warnings up to `SMG_WEATHER_NEARBY_MI` (default 50) from
 the site, police calls up to `SMG_CRIME_MAX_RADIUS_MI` (default 10; "at the site" is
 `SMG_CRIME_RADIUS_MI`, default 1), registry up to `SMG_REGISTRY_MAX_RADIUS_MI` (default 5;
 main radius `SMG_REGISTRY_RADIUS_MI`, default 1).
+
+**Threat level.** The worst alert at a site sets the floor (HIGH, or ELEVATED for MED). A
+score then adds every alert at the site plus the 5 closest nearby ones: HIGH 3, MED 2, LOW
+0.5, each times a closeness factor that halves at `SMG_THREAT_HALF_MI` (default 2) for police
+calls and at 10 mi for weather areas. A score of 2 or more makes it at least ELEVATED, 6 or
+more HIGH. "All sites" shows the highest site. Worked examples are in `src/server/alerts.ts`.
 
 **Intel map.** `SMG_GLOBE_URL` frames God's Eye View in the dashboard (unset: the static
 map). A public globe also needs `SMG_GLOBE_SECRET`, shared with its login gate; see
 `deploy/globe/README.md`. Its *Cameras* pill turns on God's Eye's public camera layer; until God's Eye has
 cameras near the client sites it also says "No public cameras in this area yet". Set
 `SMG_GLOBE_LOCAL_CAMERAS=1` once a Florida camera pack is loaded there.
+
+Its other controls:
+- **Satellites:** God's Eye's satellite layer. Clicking a satellite shows its orbit facts and
+  its distance from the client's site (God's Eye patch 4).
+- **Alerts** (on by default): alert pins, each with its distance from the site.
+- **Registry:** only for clients with the registry on; numbered pins matching the registry
+  card. Clicking a pin opens the matching card entry (patch 3). `SMG_REGISTRY_MAP=0` hides the
+  pill and keeps the card.
+- **Full screen.**
+- **Back to my sites.**
+
+The God's Eye patches are in `deploy/globe/gev-patches`.
 
 `SMG_API_CONTACT` is the contact sent to these services, as they ask. Feed health:
 `sudo -u smg sqlite3 /var/lib/smg/portal.db "select * from feed_status"`. After changing

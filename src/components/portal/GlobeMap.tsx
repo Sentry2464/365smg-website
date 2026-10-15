@@ -182,6 +182,10 @@ export function GlobeMap({
 
   // Registry pins: off until picked. Numbered in the card's order, so ③ here is ③ there.
   const [showRegistry, setShowRegistry] = useState(false)
+  // Alerts on the map (on by default): site pins coloured and titled by their worst alert,
+  // and police calls as pins. Off leaves plain site pins; the alerts list is unaffected.
+  const [showAlerts, setShowAlerts] = useState(true)
+  const mapAlerts = useMemo(() => (showAlerts ? alerts : []), [showAlerts, alerts])
   const located = useMemo(() => sites.filter((s): s is Located => s.lat != null && s.lng != null), [sites])
   const registryPeople = useMemo(() => {
     if (!showRegistry || !registry) return []
@@ -191,7 +195,7 @@ export function GlobeMap({
   }, [showRegistry, registry, siteId, located])
   // The globe takes 24 marks. In order: the sites, alerts at the sites, registrants (in the
   // card's order, so a dropped pin is always the farthest), then nearby context.
-  const atSitePins = useMemo(() => incidentPins(alerts, false), [alerts])
+  const atSitePins = useMemo(() => incidentPins(mapAlerts, false), [mapAlerts])
   const registryRoom = Math.max(0, MAX_PINS - located.length - atSitePins.length)
   const activeStorms = layers.Hurricanes && storms?.length ? storms : null
 
@@ -209,7 +213,7 @@ export function GlobeMap({
       layers: (Object.keys(LAYERS) as Layer[]).filter((l) => layers[l]).flatMap((l) => LAYERS[l]),
       annotations: [...located.map((s) => {
         // Worst alert at the site colours its pin and names the event.
-        const hit = alerts.find((a) => !a.nearby && (a.siteId === s.id || a.siteId === null))
+        const hit = mapAlerts.find((a) => !a.nearby && (a.siteId === s.id || a.siteId === null))
         // Cyan marks the picked site, unless the registry's cyan pins are showing.
         const picked = s.id === siteId && registryPeople.length === 0
         const color = hit?.severity === 'HIGH' ? 'red' : hit?.severity === 'MED' ? 'amber' : picked ? 'cyan' : 'primary'
@@ -220,7 +224,7 @@ export function GlobeMap({
           label: (hit ? `${s.name} · ${hit.title}` : s.name).slice(0, 120),
           color,
         }
-      }), ...atSitePins, ...registryPins(registryPeople, registryRoom), ...incidentPins(alerts, true)].slice(0, MAX_PINS),
+      }), ...atSitePins, ...registryPins(registryPeople, registryRoom), ...incidentPins(mapAlerts, true)].slice(0, MAX_PINS),
     }
     const id = `smg-${++seq.current}`
     // The sites, for a followed satellite's distance and direction (God's Eye patch 4).
@@ -240,7 +244,7 @@ export function GlobeMap({
     retry.current = setTimeout(() => {
       if (lastAcked.current !== id && lastSent.current === id) post()
     }, 10_000)
-  }, [located, siteId, layers, origin, alerts, activeStorms, registryPeople, registryRoom, atSitePins])
+  }, [located, siteId, layers, origin, mapAlerts, activeStorms, registryPeople, registryRoom, atSitePins])
 
   useEffect(() => () => clearTimeout(retry.current), [])
 
@@ -316,6 +320,9 @@ export function GlobeMap({
               {l}
             </button>
           ))}
+          <button type="button" className="cp-pill" aria-pressed={showAlerts} onClick={() => setShowAlerts((v) => !v)}>
+            Alerts
+          </button>
           {registry && (
             <button type="button" className="cp-pill" aria-pressed={showRegistry} onClick={() => setShowRegistry((v) => !v)}>
               Registry

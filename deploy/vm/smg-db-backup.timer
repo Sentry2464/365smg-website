@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily portal database copy at 02:00, before the nightly VM backup
+
+[Timer]
+OnCalendar=*-*-* 02:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

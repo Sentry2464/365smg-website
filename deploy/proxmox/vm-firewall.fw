@@ -1,0 +1,32 @@
+# Proxmox firewall rules for the portal VM. create-vm.sh fills in @MGMT_CIDR@ and
+# @DNS@ and copies this to /etc/pve/firewall/<VMID>.fw.
+#
+# Inbound: SSH from the management network only. Cloudflare Tunnel is outbound,
+# so no web ports are opened.
+# Outbound: internet only. Private networks (office LAN, guard portal, GSOC) are
+# blocked, apart from DNS to the VLAN 50 gateway.
+
+[OPTIONS]
+enable: 1
+policy_in: DROP
+policy_out: DROP
+log_level_in: info
+log_level_out: info
+
+[RULES]
+IN SSH(ACCEPT) -source @MGMT_CIDR@ -log nolog
+IN Ping(ACCEPT) -source @MGMT_CIDR@ -log nolog
+
+OUT DNS(ACCEPT) -dest @DNS@ -log nolog
+OUT DROP -dest 10.0.0.0/8
+OUT DROP -dest 172.16.0.0/12
+OUT DROP -dest 192.168.0.0/16
+OUT DROP -dest 169.254.0.0/16
+OUT DNS(ACCEPT) -log nolog
+OUT NTP(ACCEPT) -log nolog
+OUT HTTPS(ACCEPT) -log nolog
+OUT HTTP(ACCEPT) -log nolog
+OUT ACCEPT -p tcp -dport 7844 -log nolog # Cloudflare Tunnel
+OUT ACCEPT -p udp -dport 7844 -log nolog # Cloudflare Tunnel (QUIC)
+OUT ACCEPT -p tcp -dport 587 -log nolog # SMTP submission for notification email (Phase 3)
+OUT Ping(ACCEPT) -log nolog

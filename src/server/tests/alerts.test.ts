@@ -1,0 +1,264 @@
+import type { Database } from 'better-sqlite3'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { ALL_SITES, type Site } from '@/components/portal/data'
+import { clientAlerts, liveFeed, milesToArea, nwsSeverity, parseNws, pollNws, syncSiteAlerts, threatLevel, threatScore, type AlertRow } from '../alerts'
+import { openDatabase } from '../core.mjs'
+import { createClient, createSite } from '../store'
+
+const admin = { id: 'system' }
+
+// Shape of an api.weather.gov /alerts/active response (trimmed).
+function nwsResponse(...alerts: { id: string; event: string; severity: string; status?: string; ends?: string }[]) {
+  return {
+    type: 'FeatureCollection',
+    features: alerts.map((a) => ({
+      id: `https://api.weather.gov/alerts/${a.id}`,
+      type: 'Feature',
+      geometry: null,
+      properties: {
+        '@id': `https://api.weather.gov/alerts/${a.id}`,
+        id: a.id,
+        areaDesc: 'Marion, FL',
+        onset: '2026-10-12T14:00:00-04:00',
+        ends: a.ends ?? '2099-01-01T00:00:00Z',
+        status: a.status ?? 'Actual',
+        messageType: 'Alert',
+        severity: a.severity,
+        event: a.event,
+        headline: `${a.event} issued by NWS Jacksonville FL`,
+      },
+    })),
+  }
+}
+
+const toSite = (r: { id: string; slug: string; name: string }): Site => ({
+  id: r.id,
+  slug: r.slug,
+  name: r.name,
+  shortName: r.name,
+  city: '',
+  timeZone: 'America/New_York',
+  map: { x: 50, y: 50 },
+})
+
+let db: Database
+beforeEach(() => {
+  db = openDatabase(':memory:')
+})
+
+describe('NWS parsing', () => {
+  it('maps severities and keeps only real, active alerts', () => {
+    expect(nwsSeverity('Severe', 'Flood Warning')).toBe('HIGH')
+    expect(nwsSeverity('Moderate', 'Flood Warning')).toBe('HIGH')
+    expect(nwsSeverity('Moderate', 'Tropical Storm Watch')).toBe('MED')
+    expect(nwsSeverity('Minor', 'Small Craft Advisory')).toBe('LOW')
+
+    const items = parseNws(
+      nwsResponse(
+        { id: 'urn:1', event: 'Flood Warning', severity: 'Moderate' },
+        { id: 'urn:2', event: 'Test Message', severity: 'Unknown', status: 'Test' },
+      ),
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ id: 'nws:urn:1', severity: 'HIGH', area: 'Marion, FL' })
+    expect(items[0].url).toBe('https://api.weather.gov/alerts/urn:1')
+    expect(() => parseNws({})).toThrow()
+  })
+})
+
+describe('site alerts', () => {
+  function setup() {
+    const a = createClient(db, admin, { name: 'Acme HOA', industry: 'HOA', industryPlural: '', managerEmail: '' })
+    const b = createClient(db, admin, { name: 'Bayside', industry: 'Office', industryPlural: '', managerEmail: '' })
+    const a1 = createSite(db, admin, a.id, { name: 'Acme North', city: 'Ocala, FL', timeZone: '', lat: '29.19', lng: '-82.14' })
+    const a2 = createSite(db, admin, a.id, { name: 'Acme South', city: 'Orlando, FL', timeZone: '', lat: '28.5', lng: '-81.4' })
+    const b1 = createSite(db, admin, b.id, { name: 'Bayside Tower', city: 'Ocala, FL', timeZone: '', lat: '29.19', lng: '-82.14' })
+    return { a, b, a1, a2, b1 }
+  }
+
+  it('replaces a site’s alerts on each sync and keeps clients apart', () => {
+    const { a, b, a1, b1 } = setup()
+    const flood = parseNws(nwsResponse({ id: 'urn:1', event: 'Flood Warning', severity: 'Severe' }))
+    syncSiteAlerts(db, 'nws', a1, flood)
+    expect(clientAlerts(db, a.id).map((r) => r.site_id)).toEqual([a1.id])
+    expect(clientAlerts(db, b.id)).toEqual([])
+
+    syncSiteAlerts(db, 'nws', b1, flood)
+    expect(clientAlerts(db, b.id).map((r) => r.site_id)).toEqual([b1.id])
+
+    // The warning ends for a1: gone for Acme, still there for Bayside.
+    syncSiteAlerts(db, 'nws', a1, [])
+    expect(clientAlerts(db, a.id)).toEqual([])
+    expect(clientAlerts(db, b.id)).toHaveLength(1)
+  })
+
+  it('hides alerts past their end time', () => {
+    const { a, a1 } = setup()
+    syncSiteAlerts(
+      db,
+      'nws',
+      a1,
+      parseNws(nwsResponse({ id: 'urn:old', event: 'Heat Advisory', severity: 'Minor', ends: '2020-01-01T00:00:00Z' })),
+    )
+    expect(clientAlerts(db, a.id)).toEqual([])
+  })
+
+  it('polls each distinct point once and keeps old alerts when a request fails', async () => {
+    const { a, a1 } = setup()
+    const asked: string[] = []
+    const ok = (async (url: string) => {
+      asked.push(url)
+      return new Response(JSON.stringify(nwsResponse({ id: 'urn:1', event: 'Flood Warning', severity: 'Severe' })))
+    }) as unknown as typeof fetch
+    expect(await pollNws(db, ok)).toEqual({ points: 2, failures: 0 })
+    expect(asked.sort()).toEqual([
+      'https://api.weather.gov/alerts/active?area=FL',
+      'https://api.weather.gov/alerts/active?point=28.5000,-81.4000',
+      'https://api.weather.gov/alerts/active?point=29.1900,-82.1400',
+    ])
+    expect(clientAlerts(db, a.id)).toHaveLength(2)
+
+    const down = (async () => new Response('busy', { status: 503 })) as unknown as typeof fetch
+    expect(await pollNws(db, down)).toEqual({ points: 2, failures: 3 }) // area + 2 points
+    expect(clientAlerts(db, a.id).map((r) => r.site_id)).toContain(a1.id)
+  })
+
+  it('builds the dashboard feed: threat levels, banner and one entry for all-site alerts', () => {
+    const { a, a1, a2 } = setup()
+    syncSiteAlerts(db, 'nws', a1, parseNws(nwsResponse({ id: 'urn:1', event: 'Flood Warning', severity: 'Severe' })))
+    const watch = parseNws(nwsResponse({ id: 'urn:2', event: 'Tropical Storm Watch', severity: 'Moderate' }))
+    syncSiteAlerts(db, 'nws', a1, [...parseNws(nwsResponse({ id: 'urn:1', event: 'Flood Warning', severity: 'Severe' })), ...watch])
+    syncSiteAlerts(db, 'nws', a2, watch)
+
+    const sites = [toSite(a1), toSite(a2)]
+    const feed = liveFeed(sites, clientAlerts(db, a.id))
+    expect(feed.demo).toBe(false)
+    expect(feed.alerts.map((x) => [x.severity, x.siteId])).toEqual([
+      ['HIGH', a1.id],
+      ['MED', null],
+    ])
+    expect(feed.summaries[a1.id]).toEqual({ threatLevel: 'HIGH', activeAlertId: feed.alerts[0].id })
+    expect(feed.summaries[a2.id]).toEqual({ threatLevel: 'ELEVATED', activeAlertId: null })
+    expect(feed.summaries[ALL_SITES].threatLevel).toBe('HIGH')
+    expect(feed.incidents.map((i) => [i.siteId, i.severity])).toEqual(
+      expect.arrayContaining([
+        [a1.id, 'HIGH'],
+        [a2.id, 'MED'],
+      ]),
+    )
+  })
+})
+
+describe('nearby tier', () => {
+  // A square warning area roughly 10-17 miles north of Orlando.
+  const square = [[[-81.5, 28.7], [-81.3, 28.7], [-81.3, 28.8], [-81.5, 28.8], [-81.5, 28.7]]]
+
+  it('measures distance to an alert area', () => {
+    expect(milesToArea({ lat: 28.75, lng: -81.4 }, square)).toBe(0)
+    expect(milesToArea({ lat: 28.54, lng: -81.4 }, square)).toBeCloseTo(11, 0)
+  })
+
+  it('shows regional weather as nearby when nothing covers the site, without raising the threat', async () => {
+    const c = createClient(db, admin, { name: 'Acme', industry: 'HOA', industryPlural: '', managerEmail: '' })
+    const site = createSite(db, admin, c.id, { name: 'Acme', city: 'Orlando, FL', timeZone: '', lat: '28.54', lng: '-81.4' })
+    const regional = nwsResponse({ id: 'urn:lake', event: 'Flood Warning', severity: 'Severe' })
+    ;(regional.features[0] as { geometry: unknown }).geometry = { type: 'Polygon', coordinates: square }
+    const serve = (async (url: string) =>
+      Response.json(url.includes('area=FL') ? regional : nwsResponse())) as unknown as typeof fetch
+    await pollNws(db, serve)
+
+    const feed = liveFeed([toSite(site)], clientAlerts(db, c.id))
+    expect(feed.alerts).toHaveLength(1)
+    expect(feed.alerts[0]).toMatchObject({ nearby: true, severity: 'HIGH' })
+    expect(feed.alerts[0].distanceMi).toBeCloseTo(11, 0)
+    expect(feed.summaries[site.id]).toEqual({ threatLevel: 'LOW', activeAlertId: null })
+    expect(feed.incidents).toEqual([])
+
+    // The statewide request fails next time: the nearby warning stays.
+    const regionalDown = (async (url: string) =>
+      url.includes('area=FL') ? new Response('busy', { status: 503 }) : Response.json(nwsResponse())) as unknown as typeof fetch
+    await pollNws(db, regionalDown)
+    expect(liveFeed([toSite(site)], clientAlerts(db, c.id)).alerts).toHaveLength(1)
+  })
+
+  it('hides nearby items once something is at the site', () => {
+    const c = createClient(db, admin, { name: 'Acme', industry: 'HOA', industryPlural: '', managerEmail: '' })
+    const site = createSite(db, admin, c.id, { name: 'Acme', city: 'Orlando, FL', timeZone: '', lat: '28.54', lng: '-81.4' })
+    const [here] = parseNws(nwsResponse({ id: 'urn:here', event: 'Heat Advisory', severity: 'Minor' }))
+    const [far] = parseNws(nwsResponse({ id: 'urn:far', event: 'Flood Warning', severity: 'Severe' }))
+    syncSiteAlerts(db, 'nws', site, [here, { ...far, distanceMi: 12 }])
+    const feed = liveFeed([toSite(site)], clientAlerts(db, c.id))
+    expect(feed.alerts.map((a) => [a.title.split(' ')[0], !!a.nearby])).toEqual([['Heat', false]])
+  })
+})
+
+describe('threat level', () => {
+  const row = (severity: 'HIGH' | 'MED' | 'LOW', distance: number | null, source = 'opd', id = `${severity}${distance}${Math.random()}`): AlertRow => ({
+    alert_id: id,
+    site_id: 's1',
+    source,
+    event: 'x',
+    severity,
+    headline: 'x',
+    url: '',
+    starts_at: null,
+    ends_at: null,
+    first_seen_at: '2026-01-01T00:00:00Z',
+    distance_mi: distance,
+    lat: null,
+    lng: null,
+  })
+
+  it('keeps the at-site floor: the worst alert at the site', () => {
+    expect(threatLevel([])).toBe('LOW')
+    expect(threatLevel([row('MED', 0.5)])).toBe('ELEVATED')
+    expect(threatLevel([row('HIGH', 0.9)])).toBe('HIGH')
+    expect(threatLevel([row('MED', null, 'ntas')])).toBe('ELEVATED')
+  })
+
+  it('counts nearby incidents, closer ones more', () => {
+    expect(threatLevel([row('MED', 1.1)])).toBe('LOW') // one MED just past the site radius
+    expect(threatLevel([row('HIGH', 1.2)])).toBe('ELEVATED') // one HIGH that close
+    expect(threatLevel([row('HIGH', 6)])).toBe('LOW') // the same, far away
+    expect(threatScore([row('MED', 1.5)])).toBeGreaterThan(threatScore([row('MED', 3)]))
+    // The dashboard case: four MED calls 5–7 miles out stay LOW.
+    expect(threatLevel([row('MED', 5.4), row('MED', 6.6), row('MED', 6.8), row('MED', 7.3)])).toBe('LOW')
+  })
+
+  it('counts clusters', () => {
+    expect(threatLevel([row('MED', 1.5), row('MED', 2), row('MED', 2)])).toBe('ELEVATED')
+    // A cluster at the site raises ELEVATED to HIGH.
+    expect(threatLevel([row('MED', 0.2), row('MED', 0.5), row('MED', 0.8)])).toBe('HIGH')
+    // Only the closest five nearby count, so a busy city 8–10 miles out doesn't add up.
+    expect(threatLevel(Array.from({ length: 40 }, (_, i) => row('MED', 8 + (i % 3))))).toBe('LOW')
+  })
+
+  it('weighs weather areas on a wider scale', () => {
+    expect(threatLevel([row('HIGH', 5, 'nws')])).toBe('ELEVATED') // a warning 5 mi away
+    expect(threatLevel([row('HIGH', 11, 'nws')])).toBe('LOW')
+  })
+})
+
+describe('feed runs', () => {
+  it('never overlaps a feed with itself, and can queue one more run', async () => {
+    const { runFeed } = await import('../alerts')
+    let active = 0
+    let max = 0
+    let runs = 0
+    const slow = async () => {
+      runs++
+      max = Math.max(max, ++active)
+      await new Promise((r) => setTimeout(r, 20))
+      active--
+    }
+    await Promise.all([runFeed('t', slow), runFeed('t', slow), runFeed('t', slow, { again: true })])
+    expect(max).toBe(1)
+    expect(runs).toBe(2)
+    // A failing run is logged, not thrown, and frees the slot.
+    await runFeed('t', async () => {
+      throw new Error('down')
+    })
+    await runFeed('t', slow)
+    expect(runs).toBe(3)
+  })
+})

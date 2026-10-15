@@ -1,0 +1,40 @@
+[Unit]
+Description=Intel map: OSIRIS client edition (365 SMG Client Portal)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+# Camera list and place-name caches survive restarts here.
+StateDirectory=osiris
+WorkingDirectory=/opt/osiris/current
+ExecStart=/usr/bin/node server.js
+Environment=NODE_ENV=production
+Environment=PORT=4174
+# Localhost only: the login gate (gev-gate, port 4180) is the only way in.
+Environment=HOSTNAME=127.0.0.1
+Environment=OSIRIS_FRAME_ANCESTORS=https://portal.365securitymg.com
+Environment=OSIRIS_CCTV_SNAPSHOT=/var/lib/osiris/cctv-catalog.json
+Environment=OSIRIS_NOMINATIM_CACHE=/var/lib/osiris/nominatim.json
+# Optional keys (OPENSKY_CLIENT_ID/SECRET for better flight coverage), root-only.
+EnvironmentFile=-/etc/osiris.env
+Restart=on-failure
+RestartSec=5
+SuccessExitStatus=143
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

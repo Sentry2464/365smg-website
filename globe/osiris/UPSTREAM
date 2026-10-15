@@ -1,0 +1,4 @@
+# OSIRIS version the client edition is built from (MIT licence; see the upstream LICENSE).
+# To update: change OSIRIS_COMMIT, run build.sh, fix any patch or remove.txt conflicts.
+OSIRIS_REPO=https://github.com/simplifaisoul/osiris.git
+OSIRIS_COMMIT=8d9baa2c144625547317e433fb7e9cf29c9f4d69

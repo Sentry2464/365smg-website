@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Portal database tasks, run as the app user. See scripts/portal-admin.mjs.
+#   sudo smg-admin create-staff --email you@365securitymg.com --name "Your Name" [--role investigator]
+#   sudo smg-admin send-test-email --to you@365securitymg.com
+#   sudo smg-admin registry --enable-all   (or --disable-all, or --client <id> [--off])
+set -euo pipefail
+[ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }
+[ -d /opt/smg-portal/src/node_modules ] || { echo "deploy first: sudo smg-deploy" >&2; exit 1; }
+cd /opt/smg-portal/src
+# Load the portal's settings (mail credentials etc.) as plain KEY=value lines, like systemd does.
+while IFS= read -r line; do
+  [[ $line =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] && export "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+done < /etc/smg-portal.env
+exec sudo -E -u smg -H env NODE_ENV=production SMG_DATA_DIR=/var/lib/smg node scripts/portal-admin.mjs "$@"

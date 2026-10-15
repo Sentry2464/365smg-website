@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+# Local patches to God's Eye View on VM 151, applied after each install or update of GEV.
+# Each patch checks the exact upstream text it changes and stops if that text is not there,
+# so a GEV update can't be patched blindly.
+#
+#   sudo deploy/globe/gev-patches/apply.sh [GEV_DIR]      default /opt/gev/gods-eye-view
+#
+# Then restart God's Eye. See README.md.
+set -euo pipefail
+GEV_DIR=${1:-/opt/gev/gods-eye-view}
+PINNED=591f299
+SESSIONS=${GEV_HLS_SESSIONS:-5}
+# Where "Watch live on FL511" goes; {id} becomes the FDOT camera number (fdot-<id> in the pack).
+FL511_LIVE_URL=${FL511_LIVE_URL:-https://fl511.com/cctv}
+
+[ -d "$GEV_DIR" ] || { echo "no God's Eye at $GEV_DIR" >&2; exit 1; }
+HEAD=$(git -c safe.directory="$GEV_DIR" -C "$GEV_DIR" rev-parse --short=7 HEAD 2>/dev/null || echo unknown)
+if [ "$HEAD" != "$PINNED" ] && [ "${GEV_PATCH_ANY_VERSION:-}" != 1 ]; then
+  echo "God's Eye is at $HEAD, these patches are for $PINNED. Review them against the new version," >&2
+  echo "then rerun with GEV_PATCH_ANY_VERSION=1." >&2
+  exit 1
+fi
+
+# 1. HLS live-video sessions: 2 -> $SESSIONS server-wide (HLS_LIMITS in stream.js).
+#    One per client is enforced by the login gate (GATE_STREAMS_PER_CLIENT).
+FILE="$GEV_DIR/server/providers/cctv/stream.js"
+node - "$FILE" "$SESSIONS" <<'JS'
+const fs = require('node:fs')
+const [file, sessions] = process.argv.slice(2)
+const src = fs.readFileSync(file, 'utf8')
+const block = /HLS_LIMITS\s*=\s*Object\.freeze\(\{[\s\S]*?\}\)/.exec(src)
+if (!block) { console.error(`HLS_LIMITS block not found in ${file}`); process.exit(1) }
+const re = /(\bsessions\s*:\s*)(\d+)\b/g
+const found = [...block[0].matchAll(re)]
+if (found.length !== 1) { console.error(`expected one "sessions:" in HLS_LIMITS, found ${found.length}`); process.exit(1) }
+const current = found[0][2]
+if (current === sessions) { console.log(`HLS sessions already ${sessions}`); process.exit(0) }
+if (current !== '2') { console.error(`HLS sessions is ${current}, expected the upstream 2; not touching it`); process.exit(1) }
+const patched = block[0].replace(re, `$1${sessions}`)
+fs.writeFileSync(file, src.replace(block[0], patched))
+console.log(`HLS sessions: 2 -> ${sessions} (${file})`)
+JS
+# 2. Live video links in the camera panel, for FDOT cameras. Live video can't go through our
+#    Cloudflare Tunnel (the gate refuses it), so:
+#      "Watch live"          the gate's Cloudflare Stream player, /live/fdot-<id> (SMG_LIVE=1)
+#      "Watch live on FL511" FDOT's own site (FL511_LIVE_URL)
+#    This changes the browser code: rebuild God's Eye (npm run build) before restarting it.
+FILE="$GEV_DIR/src/ui/cctvPresentation.js"
+node - "$FILE" "$FL511_LIVE_URL" "${SMG_LIVE:-0}" <<'JS'
+const fs = require('node:fs')
+const [file, fl511Url, smgLive] = process.argv.slice(2)
+if (!/^https:\/\/[^\s'"\\<>`]+$/.test(fl511Url)) { console.error(`FL511_LIVE_URL must be a plain https URL: ${fl511Url}`); process.exit(1) }
+const stream = smgLive === '1'
+const src = fs.readFileSync(file, 'utf8')
+const BEGIN = '  // 365 SMG patch 2 begin'
+const END = '  // 365 SMG patch 2 end\n'
+const block = `${BEGIN}: live video links for FDOT cameras (Stream player, FL511).
+  if (this._cctvMeta) {
+    let links = this._smgLiveLinks;
+    if (!links) {
+      links = this._smgLiveLinks = document.createElement('div');
+      links.id = 'smg-live-links';
+      links.style.cssText = 'gap:14px;flex-wrap:wrap;margin-top:6px';
+      const add = (id, text, strong) => {
+        const a = document.createElement('a');
+        a.id = id;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = text;
+        a.style.cssText = \`font-size:12px;font-weight:\${strong ? 700 : 500};color:#7fd3ff;text-decoration:underline\`;
+        links.appendChild(a);
+      };
+      if (${stream}) add('smg-stream-live', 'Watch live \\u25B6', true);
+      add('smg-fl511-live', 'Watch live on FL511 \\u2197', !${stream});
+      this._cctvMeta.after(links);
+    }
+    const fdotId = enabled
+      ? /^fdot-(\\d+)$/.exec(String(activeCamera?.id || ''))?.[1]
+      : null;
+    links.style.display = fdotId ? 'flex' : 'none';
+    if (fdotId) {
+      const live = links.querySelector('#smg-stream-live');
+      if (live) live.href = '/live/fdot-' + fdotId;
+      links.querySelector('#smg-fl511-live').href = ${JSON.stringify(fl511Url)}.replace('{id}', fdotId);
+    }
+  }
+${END}`
+const ANCHOR = '  const liveIntent = enabled && !!activeCamera?.isVideo;\n'
+let out
+if (src.includes(BEGIN)) {
+  out = src.slice(0, src.indexOf(BEGIN)) + block + src.slice(src.indexOf(END) + END.length)
+} else {
+  if (src.split(ANCHOR).length !== 2) { console.error(`camera panel anchor not found once in ${file}`); process.exit(1) }
+  out = src.replace(ANCHOR, block + '\n' + ANCHOR)
+}
+if (out === src) { console.log('live links already in place'); process.exit(0) }
+fs.writeFileSync(file, out)
+console.log(`live links: ${stream ? 'Stream player + ' : ''}FL511 ${fl511Url} (${file})`)
+JS
+# 3. Numbered Registry pins (labels starting ①…⑳ or #21…) become clickable when God's Eye is
+#    framed by the portal: a click or Enter posts {type: 'gev:pin-click', label} to the parent,
+#    which opens that registrant's entry in the portal's Registry card. Browser code: rebuild.
+FILE="$GEV_DIR/src/annotations/screenAnnotationRenderer.js"
+node - "$FILE" <<'JS'
+const fs = require('node:fs')
+const [file] = process.argv.slice(2)
+const src = fs.readFileSync(file, 'utf8')
+const BEGIN = '  // 365 SMG patch 3 begin'
+const END = '  // 365 SMG patch 3 end\n'
+const block = `${BEGIN}: numbered Registry pins report clicks to the portal framing the map.
+  if (typeof window !== 'undefined' && window.parent !== window && /^(?:[\\u2460-\\u2473]|#\\d{1,4})\\s/.test(text)) {
+    node.style.pointerEvents = 'auto';
+    node.style.cursor = 'pointer';
+    node.setAttribute('tabindex', '0');
+    node.setAttribute('role', 'link');
+    node.setAttribute('aria-label', \`\${text} (show in the registry list)\`);
+    const report = () => window.parent.postMessage({ type: 'gev:pin-click', label: text }, '*');
+    node.addEventListener('click', report);
+    node.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        report();
+      }
+    });
+  }
+${END}`
+const ANCHOR = '  // size the card to the text once it is in the DOM\n  requestAnimationFrame(() => sizeCallout(callout));\n  return callout;\n'
+let out
+if (src.includes(BEGIN)) {
+  out = src.slice(0, src.indexOf(BEGIN)) + block + src.slice(src.indexOf(END) + END.length)
+} else {
+  if (src.split(ANCHOR).length !== 2) { console.error(`callout anchor not found once in ${file}`); process.exit(1) }
+  out = src.replace(ANCHOR, ANCHOR.replace('  return callout;\n', block + '  return callout;\n'))
+}
+if (out === src) { console.log('clickable Registry pins already in place'); process.exit(0) }
+fs.writeFileSync(file, out)
+console.log(`clickable Registry pins (${file})`)
+JS
+# 4. Followed satellites: plain-language orbit facts on the card (speed, orbit time, altitude
+#    range, tilt) and the distance and direction from the client's site, which the portal sends
+#    with each view ({type: 'smg:sites'}). Adds src/smg/satellites.js. Browser code: rebuild.
+HERE=$(cd "$(dirname "$0")" && pwd)
+install -d "$GEV_DIR/src/smg"
+install -m 644 "$HERE/files/smg-satellites.js" "$GEV_DIR/src/smg/satellites.js"
+FILE="$GEV_DIR/src/layers/satellites/tracking.js"
+node - "$FILE" <<'JS'
+const fs = require('node:fs')
+const [file] = process.argv.slice(2)
+const src = fs.readFileSync(file, 'utf8')
+const IMPORT = "import { smgSatelliteFacts } from '../../smg/satellites.js'; // 365 SMG patch 4\n"
+const CESIUM = "import * as Cesium from 'cesium';\n"
+const BEGIN = '    // 365 SMG patch 4 begin'
+const END = '    // 365 SMG patch 4 end\n'
+const block = `${BEGIN}: orbit facts, and distance and direction from the client's site.
+    details.push(
+      ...smgSatelliteFacts(
+        Cesium,
+        sat?.satrec,
+        layerState._trackedFrameGeo,
+        layerState._trackedFrameGeo ? layerState._trackedFrameCartesian : null,
+      ),
+    );
+${END}`
+const ANCHOR = '    ];\n    // Docked companions are consolidated onto the tracked card as SECONDARY info\n'
+let out = src
+if (!out.includes(IMPORT)) {
+  if (!out.startsWith(CESIUM)) { console.error(`expected ${file} to start with the Cesium import`); process.exit(1) }
+  out = CESIUM + IMPORT + out.slice(CESIUM.length)
+}
+if (out.includes(BEGIN)) {
+  out = out.slice(0, out.indexOf(BEGIN)) + block + out.slice(out.indexOf(END) + END.length)
+} else {
+  if (out.split(ANCHOR).length !== 2) { console.error(`satellite card anchor not found once in ${file}`); process.exit(1) }
+  out = out.replace(ANCHOR, '    ];\n' + block + ANCHOR.slice('    ];\n'.length))
+}
+if (out === src) { console.log('satellite facts already in place'); process.exit(0) }
+fs.writeFileSync(file, out)
+console.log(`satellite facts (${file})`)
+JS
+# Patched files keep God's Eye's owner (this runs as root), so its user can rebuild and update.
+OWNER=$(stat -c %U:%G "$GEV_DIR/package.json")
+chown "$OWNER" \
+  "$GEV_DIR/server/providers/cctv/stream.js" \
+  "$GEV_DIR/src/ui/cctvPresentation.js" \
+  "$GEV_DIR/src/annotations/screenAnnotationRenderer.js" \
+  "$GEV_DIR/src/layers/satellites/tracking.js" \
+  "$GEV_DIR/src/smg" "$GEV_DIR/src/smg/satellites.js"
+echo "Done. Rebuild God's Eye (npm run build, as its own user), then restart it."

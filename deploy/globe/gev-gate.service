@@ -1,0 +1,31 @@
+[Unit]
+Description=God's Eye View login gate (365 SMG Client Portal)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+ExecStart=/usr/bin/node /opt/gev-gate/gate.mjs
+# GATE_SECRET and the other settings; root-only (chmod 600).
+EnvironmentFile=/etc/gev-gate.env
+Restart=on-failure
+RestartSec=5
+# Node exits 143 on SIGTERM: a normal stop.
+SuccessExitStatus=143
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

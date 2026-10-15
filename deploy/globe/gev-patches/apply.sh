@@ -142,7 +142,6 @@ JS
 HERE=$(cd "$(dirname "$0")" && pwd)
 install -d "$GEV_DIR/src/smg"
 install -m 644 "$HERE/files/smg-satellites.js" "$GEV_DIR/src/smg/satellites.js"
-chown --reference="$GEV_DIR/src" "$GEV_DIR/src/smg" "$GEV_DIR/src/smg/satellites.js" 2>/dev/null || true
 FILE="$GEV_DIR/src/layers/satellites/tracking.js"
 node - "$FILE" <<'JS'
 const fs = require('node:fs')
@@ -178,4 +177,12 @@ if (out === src) { console.log('satellite facts already in place'); process.exit
 fs.writeFileSync(file, out)
 console.log(`satellite facts (${file})`)
 JS
+# Patched files keep God's Eye's owner (this runs as root), so its user can rebuild and update.
+OWNER=$(stat -c %U:%G "$GEV_DIR/package.json")
+chown "$OWNER" \
+  "$GEV_DIR/server/providers/cctv/stream.js" \
+  "$GEV_DIR/src/ui/cctvPresentation.js" \
+  "$GEV_DIR/src/annotations/screenAnnotationRenderer.js" \
+  "$GEV_DIR/src/layers/satellites/tracking.js" \
+  "$GEV_DIR/src/smg" "$GEV_DIR/src/smg/satellites.js"
 echo "Done. Rebuild God's Eye (npm run build, as its own user), then restart it."
